@@ -1,0 +1,440 @@
+"""
+Cliente mejorado para ML con capacidad de PUBLICAR items (no solo leer).
+
+Funcionalidades:
+  - Buscar categorías por texto
+  - Obtener atributos requeridos de una categoría
+  - Calcular comisión por categoría
+  - Crear publicaciones (POST /items)
+  - Subir imágenes a ML
+"""
+
+import json
+import os
+import requests
+import time
+from pathlib import Path
+
+ML_BASE_URL = "https://api.mercadolibre.com"
+SITE_ID = "MLA"  # Argentina
+
+# Archivo donde se guardan los tokens OAuth de ML (compartido con el cliente principal)
+TOKEN_FILE = Path("ml_tokens.json")
+
+
+class MercadoLibrePublisher:
+    def __init__(self):
+        """
+        Inicializa con las mismas credenciales que usa el resto de la app:
+        primero busca en ml_tokens.json, si no hay usa las variables de entorno.
+        """
+        self.access_token = os.environ.get("ML_ACCESS_TOKEN", "")
+        self.refresh_token = os.environ.get("ML_REFRESH_TOKEN", "")
+        self.client_id = os.environ.get("ML_CLIENT_ID", "")
+        self.client_secret = os.environ.get("ML_CLIENT_SECRET", "")
+        self.token_expires_at = 0
+        # Sobreescribir con tokens frescos si existe el archivo
+        self._load_tokens()
+
+    def _load_tokens(self):
+        """Carga tokens desde ml_tokens.json si existe (tokens más recientes)."""
+        if TOKEN_FILE.exists():
+            try:
+                data = json.loads(TOKEN_FILE.read_text())
+                self.access_token = data.get("access_token", self.access_token)
+                self.refresh_token = data.get("refresh_token", self.refresh_token)
+                self.token_expires_at = data.get("token_expires_at", 0)
+            except Exception:
+                pass
+
+    def _save_config(self):
+        """Persiste los tokens actualizados en ml_tokens.json."""
+        TOKEN_FILE.write_text(json.dumps({
+            "access_token": self.access_token,
+            "refresh_token": self.refresh_token,
+            "token_expires_at": self.token_expires_at,
+        }, indent=2))
+
+    def _ensure_token_valid(self):
+        """Renueva el token si está vencido (chequea 5 min antes para evitar expiración en mitad de una llamada)"""
+        if time.time() >= self.token_expires_at - 300:
+            self._refresh_token()
+
+    def _refresh_token(self):
+        """Renueva el access_token usando refresh_token"""
+        try:
+            resp = requests.post(
+                f"{ML_BASE_URL}/oauth/token",
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "refresh_token": self.refresh_token,
+                },
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                self.access_token = data["access_token"]
+                self.refresh_token = data["refresh_token"]
+                self.token_expires_at = time.time() + data.get("expires_in", 21600)
+                self._save_config()
+        except Exception:
+            pass
+
+    def _get(self, path: str, params: dict | None = None) -> dict | list:
+        """GET con token"""
+        self._ensure_token_valid()
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        resp = requests.get(
+            f"{ML_BASE_URL}{path}",
+            headers=headers,
+            params=params,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def _post(self, path: str, payload: dict) -> dict:
+        """POST con token. Lanza excepción con el mensaje real de la API de ML si hay error."""
+        self._ensure_token_valid()
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+        resp = requests.post(
+            f"{ML_BASE_URL}{path}",
+            headers=headers,
+            json=payload,
+            timeout=20,
+        )
+        if not resp.ok:
+            # Extraer el mensaje de error que devuelve ML (ej: "quantity must be greater than 0")
+            try:
+                err = resp.json()
+                msg = err.get("message") or err.get("cause", [{}])[0].get("message") or str(err)
+            except Exception:
+                msg = resp.text
+            raise Exception(f"ML {resp.status_code}: {msg}")
+        return resp.json()
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Búsqueda y meta-datos
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def buscar_categorias(self, query: str, limit: int = 8) -> list[dict]:
+        """
+        Busca categorías en ML por texto usando el endpoint específico de categorías.
+        Ej: buscar_categorias("camara") → [{"category_id": "MLA1051", "category_name": "Webcams", ...}]
+        """
+        try:
+            # Intentar con el endpoint específico de búsqueda de categorías
+            data = self._get(
+                f"/sites/{SITE_ID}/categories/search",
+                params={"q": query, "limit": limit},
+            )
+
+            # El endpoint devuelve {"results": [...]} con categorías
+            results = data.get("results", [])
+
+            # Normalizar respuesta a formato estándar
+            categorias = []
+            for r in results:
+                categorias.append({
+                    "category_id": r.get("id") or r.get("category_id"),
+                    "category_name": r.get("name") or r.get("category_name"),
+                })
+
+            return categorias[:limit]
+
+        except Exception as e:
+            # Si falla, intentar fallback con domain_discovery (menos preciso pero más compatible)
+            try:
+                data = self._get(
+                    f"/sites/{SITE_ID}/domain_discovery/search",
+                    params={"q": query, "limit": limit},
+                )
+                return data.get("results", [])
+            except Exception:
+                return []
+
+    def obtener_atributos(self, category_id: str) -> list[dict]:
+        """
+        Obtiene atributos requeridos de una categoría.
+        Devuelve: [{"id": "BRAND", "name": "Marca", "tags": {"required": true, ...}}, ...]
+        """
+        try:
+            data = self._get(f"/categories/{category_id}/attributes")
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    def obtener_comision(self, price: float, category_id: str, listing_type_id: str = "gold_special") -> tuple[float, float]:
+        """
+        Calcula comisión por categoría.
+        Retorna: (porcentaje_comision, monto_comision)
+        """
+        try:
+            data = self._get(
+                f"/sites/{SITE_ID}/listing_prices",
+                params={
+                    "price": price,
+                    "category_id": category_id,
+                    "listing_type_id": listing_type_id,
+                },
+            )
+            sale_fee = data.get("sale_fee", {})
+            pct = sale_fee.get("percentage", 0)
+            monto = sale_fee.get("amount", 0)
+            return pct, monto
+        except Exception:
+            return 0.0, 0.0
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Creación de publicaciones
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def crear_item(
+        self,
+        title: str,
+        category_id: str,
+        price: float,
+        stock: int,
+        description: str = "",
+        images: list[str] | None = None,
+        attributes: list[dict] | None = None,
+        condition: str = "new",
+        listing_type_id: str = "gold_special",
+    ) -> dict | None:
+        """
+        Crea una publicación en Mercado Libre.
+        Retorna el ítem creado o None si falla.
+        """
+        if images is None:
+            images = []
+        if attributes is None:
+            attributes = []
+
+        payload = {
+            "title": title,
+            "category_id": category_id,
+            "price": int(price),
+            "currency_id": "ARS",
+            "available_quantity": int(stock),
+            "buying_mode": "buy_it_now",
+            "listing_type_id": listing_type_id,
+            "condition": condition,
+        }
+
+        if description:
+            payload["description"] = {"plain_text": description}
+
+        if images:
+            payload["pictures"] = [{"source": url} for url in images if url]
+
+        if attributes:
+            payload["attributes"] = attributes
+
+        # Dejamos que la excepción suba para que la UI muestre el error real de ML
+        result = self._post("/items", payload)
+        return result
+
+    def subir_imagen(self, item_id: str, image_url: str) -> dict | None:
+        """
+        Sube una imagen a una publicación existente.
+        """
+        payload = {"source": image_url}
+        try:
+            result = self._post(f"/items/{item_id}/images", payload)
+            return result
+        except Exception as e:
+            print(f"Error subiendo imagen a ML: {e}")
+            return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sugerencia de categorías y matching inteligente
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Categorías más populares en ML Argentina
+# NOTA: Los IDs se obtienen dinámicamente en la función get_popular_categories()
+# Los valores hardcoded aquí son fallback solamente
+POPULAR_CATEGORIES = {
+    "Smartphones": "MLA1051",
+    "Notebooks": "MLA1649",
+    "Tablets": "MLA1055",
+    "Cámaras Digitales": "MLA1040",
+    "Auriculares": "MLA1093",
+    "Teclados": "MLA1051",  # Fallback - será reemplazado por búsqueda dinámica
+    "Mouse": "MLA1051",     # Fallback
+    "Monitores": "MLA1051", # Fallback
+    "Impresoras": "MLA1083",
+    "Routers": "MLA1096",
+    "Webcams": "MLA1073",
+    "Parlantes": "MLA1090",
+    "Cables y Conectores": "MLA1051", # Fallback
+    "Memorias USB": "MLA1051", # Fallback
+    "Baterías": "MLA1051", # Fallback
+}
+
+KEYWORDS_MAPPING = {
+    # Palabras clave → términos de búsqueda sugeridos
+    "teclado": ["teclado", "keyboard"],
+    "mouse": ["mouse", "ratón"],
+    "auricular": ["auriculares", "headphones"],
+    "cámara": ["cámara", "camara"],
+    "pantalla": ["monitor", "pantalla"],
+    "notebook": ["notebook", "laptop"],
+    "smartphone": ["smartphone", "celular"],
+    "tablet": ["tablet", "ipad"],
+    "impresora": ["impresora", "printer"],
+    "router": ["router", "modem"],
+    "webcam": ["webcam", "camara web"],
+    "parlante": ["parlante", "speaker"],
+    "cable": ["cables", "conectores"],
+    "batería": ["batería", "bateria"],
+    "memoria": ["memoria", "usb"],
+}
+
+
+def extraer_keywords_producto(nombre_producto: str) -> list[str]:
+    """
+    Extrae palabras clave del nombre del producto para sugerir búsquedas.
+
+    Ej: "Teclado + Mouse Logitech Pop Blanco"
+    → ["teclado", "mouse", "logitech"]
+    """
+    palabras = nombre_producto.lower().split()
+    stopwords = {"y", "+", "de", "con", "para", "blanco", "negro", "gris", "rojo", "azul", "pop", "kit"}
+
+    keywords = []
+    for palabra in palabras:
+        palabra_limpia = palabra.strip("+-()[]{}.,")
+        if len(palabra_limpia) > 2 and palabra_limpia not in stopwords:
+            keywords.append(palabra_limpia)
+
+    return keywords[:5]
+
+
+def sugerir_terminos_busqueda(nombre_producto: str) -> list[str]:
+    """
+    Sugiere términos de búsqueda basados en el nombre del producto.
+
+    Ej: "Teclado + Mouse Logitech"
+    → ["teclado", "mouse", "teclado y mouse", "periféricos"]
+    """
+    keywords = extraer_keywords_producto(nombre_producto)
+    sugerencias = set()
+
+    for kw in keywords:
+        if kw in KEYWORDS_MAPPING:
+            sugerencias.update(KEYWORDS_MAPPING[kw])
+        else:
+            sugerencias.add(kw)
+
+    if "teclado" in keywords and "mouse" in keywords:
+        sugerencias.add("teclado y mouse")
+
+    return sorted(list(sugerencias))[:5]
+
+
+def get_popular_categories_with_correct_ids(publisher) -> dict:
+    """
+    Obtiene los IDs correctos de las categorías populares buscándolas en ML.
+    Cachea los resultados para evitar búsquedas repetidas.
+    Retorna un dict actualizado con los IDs correctos.
+    """
+    categorias_a_buscar = [
+        "Smartphones", "Notebooks", "Tablets", "Cámaras Digitales",
+        "Auriculares", "Teclados", "Mouse", "Monitores", "Impresoras",
+        "Routers", "Webcams", "Parlantes", "Cables y Conectores",
+        "Memorias USB", "Baterías"
+    ]
+
+    resultado = {}
+    for cat_nombre in categorias_a_buscar:
+        try:
+            # Buscar la categoría en ML
+            busqueda = publisher.buscar_categorias(cat_nombre, limit=1)
+            if busqueda and len(busqueda) > 0:
+                cat_id = busqueda[0].get("category_id")
+                resultado[cat_nombre] = cat_id
+            else:
+                # Fallback a POPULAR_CATEGORIES si no encuentra
+                resultado[cat_nombre] = POPULAR_CATEGORIES.get(cat_nombre, "")
+        except Exception:
+            # Si hay error, usa el valor por defecto
+            resultado[cat_nombre] = POPULAR_CATEGORIES.get(cat_nombre, "")
+
+    return resultado
+
+
+def auto_match_categoria(nombre_producto: str, publisher) -> dict | None:
+    """
+    Intenta hacer match automático de categoría buscando términos clave.
+
+    Retorna la categoría encontrada o None si no hay coincidencia clara.
+    """
+    sugerencias = sugerir_terminos_busqueda(nombre_producto)
+
+    for termino in sugerencias:
+        resultados = publisher.buscar_categorias(termino, limit=3)
+        if resultados:
+            return resultados[0]
+
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Mapeo inteligente PS attributes → ML attributes
+# ──────────────────────────────────────────────────────────────────────────────
+
+ATTR_MAPPING = {
+    # PS field → ML attribute ID
+    "brand": "BRAND",
+    "marca": "BRAND",
+    "model": "MODEL",
+    "modelo": "MODEL",
+    "color": "COLOR",
+    "size": "SIZE",
+    "talla": "SIZE",
+    "material": "MATERIAL",
+}
+
+
+def mapear_atributos_ps_ml(ps_attributes: dict, ml_required_attrs: list[dict]) -> list[dict]:
+    """
+    Mapea atributos de PS a formato de ML.
+
+    Input:
+      ps_attributes: dict con datos de PS (ej: {"marca": "Samsung", "modelo": "Galaxy"})
+      ml_required_attrs: list de atributos requeridos en ML
+
+    Output:
+      list de atributos en formato ML: [{"id": "BRAND", "value_name": "Samsung"}, ...]
+    """
+    resultado = []
+    ps_keys_lower = {k.lower(): v for k, v in (ps_attributes or {}).items()}
+
+    for ml_attr in ml_required_attrs:
+        attr_id = ml_attr.get("id", "").upper()
+        attr_name = ml_attr.get("name", "").lower()
+
+        # Buscar en mapeo inteligente
+        valor = None
+        for ps_key, ml_id in ATTR_MAPPING.items():
+            if ml_id == attr_id and ps_key in ps_keys_lower:
+                valor = ps_keys_lower[ps_key]
+                break
+
+        # Si no encontró, buscar por nombre similar
+        if not valor:
+            for ps_key, ps_val in ps_keys_lower.items():
+                if attr_name in ps_key or ps_key in attr_name:
+                    valor = ps_val
+                    break
+
+        if valor:
+            resultado.append({"id": attr_id, "value_name": str(valor)})
+
+    return resultado
