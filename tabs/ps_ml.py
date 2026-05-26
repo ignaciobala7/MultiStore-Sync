@@ -89,7 +89,7 @@ def render():
     ):
         p = st.session_state["ps_ml_product"]
         imgs = st.session_state.get("ps_ml_images", [])
-        _render_pasos_2_a_5(p, imgs, publisher)
+        _render_pasos_2_a_5(p, imgs, publisher) 
 
 
 # ── Pasos 2 a 5 (solo se muestran cuando hay un producto encontrado) ──────────
@@ -225,12 +225,12 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                     st.metric("Precio original (PS)", f"${p['price']:,.2f}")
                 with col_b:
                     with st.spinner("Calculando comisión..."):
-                        pct_com, monto_com, debug_com = publisher.obtener_comision(
+                        pct_com, monto_com = publisher.obtener_comision(
                             p['price'], cat_id, "gold_special"
                         )
                     st.metric("Comisión ML", f"${monto_com:,.2f} ({pct_com}%)")
                     if monto_com == 0:
-                        st.caption(f"⚠️ DEBUG comisión: {debug_com}")
+                        st.caption("⚠️ No se pudo calcular la comisión")
 
                 precio_final = p['price'] + monto_com
                 col_x, col_y = st.columns(2)
