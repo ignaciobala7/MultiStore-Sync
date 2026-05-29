@@ -124,39 +124,28 @@ class MercadoLibrePublisher:
 
     def buscar_categorias(self, query: str, limit: int = 8) -> list[dict]:
         """
-        Busca categorías en ML por texto usando el endpoint específico de categorías.
+        Busca categorías en ML por texto.
         Ej: buscar_categorias("camara") → [{"category_id": "MLA1051", "category_name": "Webcams", ...}]
         """
         try:
-            # Intentar con el endpoint específico de búsqueda de categorías
+            # domain_discovery/search devuelve una lista directamente
             data = self._get(
-                f"/sites/{SITE_ID}/categories/search",
+                f"/sites/{SITE_ID}/domain_discovery/search",
                 params={"q": query, "limit": limit},
             )
+            results = data if isinstance(data, list) else data.get("results", [])
 
-            # El endpoint devuelve {"results": [...]} con categorías
-            results = data.get("results", [])
-
-            # Normalizar respuesta a formato estándar
             categorias = []
             for r in results:
                 categorias.append({
-                    "category_id": r.get("id") or r.get("category_id"),
-                    "category_name": r.get("name") or r.get("category_name"),
+                    "category_id": r.get("category_id") or r.get("id"),
+                    "category_name": r.get("category_name") or r.get("domain_name") or r.get("name"),
                 })
 
             return categorias[:limit]
 
-        except Exception as e:
-            # Si falla, intentar fallback con domain_discovery (menos preciso pero más compatible)
-            try:
-                data = self._get(
-                    f"/sites/{SITE_ID}/domain_discovery/search",
-                    params={"q": query, "limit": limit},
-                )
-                return data.get("results", [])
-            except Exception:
-                return []
+        except Exception:
+            return []
 
     def obtener_atributos(self, category_id: str) -> list[dict]:
         """
