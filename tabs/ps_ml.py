@@ -151,9 +151,7 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                 with st.spinner("Buscando categorías en ML..."):
                     cats = publisher.buscar_categorias(query_cat, limit=10)
                 st.session_state["ps_ml_categories"] = cats
-                if cats:
-                    st.session_state["ps_ml_cat_query"] = query_cat
-                else:
+                if not cats:
                     st.warning("No se encontraron categorías con ese término.")
             except Exception as e:
                 st.error(f"Error al buscar categorías: {e}")
