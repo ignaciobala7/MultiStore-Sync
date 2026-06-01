@@ -109,10 +109,11 @@ class MercadoLibrePublisher:
             timeout=20,
         )
         if not resp.ok:
-            # Extraer el mensaje de error que devuelve ML (ej: "quantity must be greater than 0")
             try:
                 err = resp.json()
-                msg = err.get("message") or err.get("cause", [{}])[0].get("message") or str(err)
+                causes = [c.get("message") for c in err.get("cause", []) if c.get("message")]
+                base = err.get("message", "")
+                msg = f"{base} — {'; '.join(causes)}" if causes else base or str(err)
             except Exception:
                 msg = resp.text
             raise Exception(f"ML {resp.status_code}: {msg}")
@@ -186,6 +187,7 @@ class MercadoLibrePublisher:
         attributes: list[dict] | None = None,
         condition: str = "new",
         listing_type_id: str = "gold_special",
+        family_name: str = "",
     ) -> dict | None:
         """
         Crea una publicación en Mercado Libre.
@@ -215,6 +217,9 @@ class MercadoLibrePublisher:
 
         if attributes:
             payload["attributes"] = attributes
+
+        if family_name:
+            payload["family_name"] = family_name
 
         # Dejamos que la excepción suba para que la UI muestre el error real de ML
         result = self._post("/items", payload)

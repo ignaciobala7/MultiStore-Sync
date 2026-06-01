@@ -253,6 +253,12 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                 if p['stock'] == 0:
                     st.warning("⚠️ El stock en PS es 0. ML requiere al menos 1 unidad para publicar — se enviará stock = 1.")
 
+                family_name = st.text_input(
+                    "Nombre de familia del producto (requerido por ML para algunas categorías):",
+                    value=p['name'],
+                    key="ps_ml_family_name",
+                )
+
                 if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
                     with st.status("Publicando en Mercado Libre...", expanded=True) as s:
                         try:
@@ -274,6 +280,7 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                                 attributes=attrs_ml,
                                 condition="new",
                                 listing_type_id="gold_special",
+                                family_name=family_name,
                             )
 
                             if item:
