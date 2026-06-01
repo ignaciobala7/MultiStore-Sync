@@ -122,14 +122,17 @@ def _render_pasos_2_a_5(p, imgs, publisher):
     with col_auto:
         # Auto-detección: usa IA para mapear el nombre del producto a una categoría de ML
         if st.button("🤖 Auto-detectar categoría", use_container_width=True, key="ps_ml_auto_match"):
-            with st.spinner("Buscando categoría automáticamente..."):
-                cat_auto = auto_match_categoria(p['name'], publisher)
-            if cat_auto:
-                st.session_state["ps_ml_auto_category"] = cat_auto
-                st.session_state["ps_ml_categories"] = [cat_auto]
-                st.rerun()
-            else:
-                st.warning("No se pudo detectar automáticamente. Busca manualmente.")
+            try:
+                with st.spinner("Buscando categoría automáticamente..."):
+                    cat_auto = auto_match_categoria(p['name'], publisher)
+                if cat_auto:
+                    st.session_state["ps_ml_auto_category"] = cat_auto
+                    st.session_state["ps_ml_categories"] = [cat_auto]
+                    st.rerun()
+                else:
+                    st.warning("No se pudo detectar automáticamente. Busca manualmente.")
+            except Exception as e:
+                st.error(f"Error al auto-detectar categoría: {e}")
 
     with col_manual:
         st.write("**O busca manualmente:**")
@@ -144,13 +147,16 @@ def _render_pasos_2_a_5(p, imgs, publisher):
         if not query_cat.strip():
             st.warning("Ingresá una categoría.")
         else:
-            with st.spinner("Buscando categorías en ML..."):
-                cats = publisher.buscar_categorias(query_cat, limit=10)
-            st.session_state["ps_ml_categories"] = cats
-            if cats:
-                st.session_state["ps_ml_cat_query"] = query_cat
-            else:
-                st.warning("No se encontraron categorías con ese término.")
+            try:
+                with st.spinner("Buscando categorías en ML..."):
+                    cats = publisher.buscar_categorias(query_cat, limit=10)
+                st.session_state["ps_ml_categories"] = cats
+                if cats:
+                    st.session_state["ps_ml_cat_query"] = query_cat
+                else:
+                    st.warning("No se encontraron categorías con ese término.")
+            except Exception as e:
+                st.error(f"Error al buscar categorías: {e}")
 
     # Si no hay resultados de búsqueda, mostrar categorías populares como atajos
     if "ps_ml_categories" not in st.session_state or not st.session_state.get("ps_ml_categories"):

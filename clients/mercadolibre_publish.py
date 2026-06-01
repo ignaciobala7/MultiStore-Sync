@@ -125,27 +125,19 @@ class MercadoLibrePublisher:
     def buscar_categorias(self, query: str, limit: int = 8) -> list[dict]:
         """
         Busca categorías en ML por texto.
-        Ej: buscar_categorias("camara") → [{"category_id": "MLA1051", "category_name": "Webcams", ...}]
+        Ej: buscar_categorias("teclado") → [{"category_id": "MLA9916", "category_name": "Teclados", ...}]
         """
-        try:
-            # domain_discovery/search devuelve una lista directamente
-            data = self._get(
-                f"/sites/{SITE_ID}/domain_discovery/search",
-                params={"q": query, "limit": limit},
-            )
-            results = data if isinstance(data, list) else data.get("results", [])
+        # El parámetro `limit` no es soportado por el endpoint; se aplica el corte en Python
+        data = self._get(
+            f"/sites/{SITE_ID}/domain_discovery/search",
+            params={"q": query},
+        )
+        results = data if isinstance(data, list) else []
 
-            categorias = []
-            for r in results:
-                categorias.append({
-                    "category_id": r.get("category_id") or r.get("id"),
-                    "category_name": r.get("category_name") or r.get("domain_name") or r.get("name"),
-                })
-
-            return categorias[:limit]
-
-        except Exception:
-            return []
+        return [
+            {"category_id": r.get("category_id"), "category_name": r.get("category_name")}
+            for r in results
+        ][:limit]
 
     def obtener_atributos(self, category_id: str) -> list[dict]:
         """
