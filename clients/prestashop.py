@@ -175,11 +175,24 @@ class PrestaShopClient:
             except (ValueError, TypeError):
                 price = 0.0
 
-            # Stock (campo "quantity" puede no estar; fallback a 0)
+            # Stock: leer desde stock_availables (más confiable que quantity del producto)
+            stock = 0
             try:
-                stock = int(p.get("quantity", 0))
-            except (ValueError, TypeError):
-                stock = 0
+                sa_list = p.get("associations", {}).get("stock_availables", [])
+                if isinstance(sa_list, dict):
+                    sa_list = [sa_list]
+                for sa in sa_list:
+                    sa_id = sa.get("id")
+                    if sa_id:
+                        r2 = requests.get(
+                            f"{PS_API_URL}/stock_availables/{sa_id}",
+                            auth=self.auth,
+                            params={"output_format": "JSON"},
+                            timeout=10,
+                        )
+                        stock += int(r2.json().get("stock_available", {}).get("quantity", 0))
+            except Exception:
+                stock = int(p.get("quantity", 0) or 0)
 
             # Imágenes: en try/except propio para que un error acá
             # no impida devolver el producto (fallback a lista vacía)
