@@ -112,7 +112,7 @@ class MercadoLibrePublisher:
             try:
                 err = resp.json()
                 causes = [c.get("message") for c in err.get("cause", []) if c.get("message")]
-                base = err.get("message", "")
+                base = err.get("error") or err.get("message", "")
                 msg = f"{base} — {'; '.join(causes)}" if causes else base or str(err)
             except Exception:
                 msg = resp.text
