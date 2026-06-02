@@ -5,9 +5,40 @@ Busca productos por SKU y devuelve las URLs públicas de sus imágenes
 en alta resolución para usarlas al publicar en Tiendanube.
 """
 
+import re
 import requests
 
 PS_BASE_URL = "https://shop.infoandina.com"
+
+
+def obtener_cotizacion_dolar() -> float:
+    """
+    Tipo de cambio USD→ARS (dólar blue).
+    Fuente primaria: header de Infoandina.
+    Fallback: dolarapi.com.
+    """
+    # 1. Infoandina
+    try:
+        from bs4 import BeautifulSoup
+        r = requests.get(PS_BASE_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+        header = soup.find("header") or soup.find(id="header") or soup.find(class_="header")
+        text = header.get_text(" ", strip=True) if header else r.text[:2000]
+        match = re.search(r"[Cc]otizaci[oó]n\s+d[oó]lar[:\s]+\$?([\d,.]+)", text)
+        if match:
+            return float(match.group(1).replace(",", ""))
+    except Exception:
+        pass
+
+    # 2. dolarapi.com (blue)
+    try:
+        r = requests.get("https://dolarapi.com/v1/dolares/blue", timeout=8)
+        if r.status_code == 200:
+            return float(r.json().get("venta", 1400))
+    except Exception:
+        pass
+
+    return 1400.0  # último fallback
 PS_API_URL = f"{PS_BASE_URL}/api"
 
 

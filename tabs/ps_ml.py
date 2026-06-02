@@ -27,6 +27,7 @@ from clients.mercadolibre_publish import (
     auto_match_categoria,
     get_popular_categories_with_correct_ids,
 )
+from clients.prestashop import obtener_cotizacion_dolar
 
 
 def render():
@@ -191,9 +192,34 @@ def _render_pasos_2_a_5(p, imgs, publisher):
             selected_cat = cat_options[sel_cat_label]
             cat_id = selected_cat["category_id"]
 
-            # ── Paso 3: Atributos de la categoría ─────────────────────────────
+            # ── Paso 3: Catálogo de ML ────────────────────────────────────────
             st.divider()
-            st.subheader("Paso 3: Completa los atributos requeridos")
+            st.subheader("Paso 3: Producto en catálogo ML (recomendado)")
+            st.caption("Muchas categorías requieren asociar la publicación al catálogo interno de ML. Si encontrás el producto, usalo.")
+
+            if st.button("🔎 Buscar en catálogo ML", key="ps_ml_buscar_catalogo"):
+                with st.spinner("Buscando en catálogo..."):
+                    resultados = publisher.buscar_en_catalogo(p['name'], limit=6)
+                st.session_state["ps_ml_catalogo"] = resultados
+
+            catalogo = st.session_state.get("ps_ml_catalogo")
+            catalog_product_id = ""
+            catalog_family_name = ""
+
+            if catalogo is not None:
+                if not catalogo:
+                    st.info("No se encontró el producto en el catálogo. Se publicará con título manual.")
+                else:
+                    opciones = {"— Ninguno (usar título manual) —": ("", "")}
+                    opciones.update({r["name"]: (r["id"], r["name"]) for r in catalogo})
+                    sel = st.selectbox("Seleccioná el producto del catálogo:", list(opciones.keys()), key="ps_ml_catalogo_sel")
+                    catalog_product_id, catalog_family_name = opciones[sel]
+                    if catalog_product_id:
+                        st.success(f"Catálogo: **{catalog_family_name}** ({catalog_product_id})")
+
+            # ── Paso 4: Atributos de la categoría ────────────────────────────────
+            st.divider()
+            st.subheader("Paso 4: Completa los atributos requeridos")
 
             with st.spinner("Obteniendo atributos de ML..."):
                 ml_attrs = publisher.obtener_atributos(cat_id)
@@ -220,44 +246,57 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                         key=f"attr_{cat_id}_{attr_id}",
                     )
 
-                # ── Paso 4: Precio con comisión ───────────────────────────────
+                # ── Paso 5: Precio con comisión ───────────────────────────────
                 st.divider()
-                st.subheader("Paso 4: Precio y comisión ML")
+                st.subheader("Paso 5: Precio y comisión ML")
+
+                tipo_de_cambio = st.number_input(
+                    "Tipo de cambio USD → ARS:",
+                    min_value=1.0,
+                    value=float(st.session_state.get("ps_ml_tc", 1200)),
+                    step=10.0,
+                    key="ps_ml_tc",
+                )
+                precio_ars = p['price'] * tipo_de_cambio
 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.metric("Precio original (PS)", f"${p['price']:,.2f}")
+                    st.metric("Precio PS (USD)", f"USD {p['price']:,.2f}")
+                    st.metric("Precio en ARS", f"${precio_ars:,.0f}")
                 with col_b:
                     with st.spinner("Calculando comisión..."):
                         pct_com, monto_com = publisher.obtener_comision(
-                            p['price'], cat_id, "gold_special"
+                            precio_ars, cat_id, "gold_special"
                         )
                     st.metric("Comisión ML", f"${monto_com:,.2f} ({pct_com}%)")
                     if monto_com == 0:
                         st.caption("⚠️ No se pudo calcular la comisión")
 
-                precio_final = p['price'] + monto_com
+                precio_final = precio_ars + monto_com
                 col_x, col_y = st.columns(2)
                 with col_x:
-                    st.metric("Precio final en ML", f"${precio_final:,.2f}")
+                    st.metric("Precio final en ML", f"${precio_final:,.0f} ARS")
                 with col_y:
                     st.write("")
-                    st.write("*Precio + comisión*")
+                    st.write("*Precio ARS + comisión*")
 
-                # ── Paso 5: Publicar en ML ────────────────────────────────────
+                # ── Paso 6: Publicar en ML ────────────────────────────────────
                 st.divider()
-                st.subheader("Paso 5: Publicar en Mercado Libre")
+                st.subheader("Paso 6: Publicar en Mercado Libre")
 
                 # ML no acepta publicaciones con stock 0 — avisar y forzar mínimo 1
                 stock_ml = max(p['stock'], 1)
                 if p['stock'] == 0:
                     st.warning("⚠️ El stock en PS es 0. ML requiere al menos 1 unidad para publicar — se enviará stock = 1.")
 
-                family_name = st.text_input(
-                    "Nombre de familia del producto (requerido por ML para algunas categorías):",
-                    value=p['name'],
-                    key="ps_ml_family_name",
-                )
+                if not catalog_product_id:
+                    family_name = st.text_input(
+                        "Nombre de familia (requerido por ML si no usás catálogo):",
+                        value=p['name'],
+                        key="ps_ml_family_name",
+                    )
+                else:
+                    family_name = catalog_family_name
 
                 if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
                     with st.status("Publicando en Mercado Libre...", expanded=True) as s:
@@ -281,6 +320,7 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                                 condition="new",
                                 listing_type_id="gold_special",
                                 family_name=family_name,
+                                catalog_product_id=catalog_product_id,
                             )
 
                             if item:

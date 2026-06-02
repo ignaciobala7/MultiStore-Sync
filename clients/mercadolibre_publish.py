@@ -176,6 +176,24 @@ class MercadoLibrePublisher:
     # Creación de publicaciones
     # ──────────────────────────────────────────────────────────────────────────
 
+    def buscar_en_catalogo(self, query: str, limit: int = 5) -> list[dict]:
+        """
+        Busca productos en el catálogo de ML.
+        Retorna lista de {id, name, status} para que el usuario elija el correcto.
+        """
+        try:
+            data = self._get(
+                "/products/search",
+                params={"site_id": SITE_ID, "q": query, "limit": limit},
+            )
+            return [
+                {"id": r.get("id"), "name": r.get("name"), "status": r.get("status")}
+                for r in data.get("results", [])
+                if r.get("status") == "active"
+            ]
+        except Exception:
+            return []
+
     def crear_item(
         self,
         title: str,
@@ -188,9 +206,11 @@ class MercadoLibrePublisher:
         condition: str = "new",
         listing_type_id: str = "gold_special",
         family_name: str = "",
+        catalog_product_id: str = "",
     ) -> dict | None:
         """
         Crea una publicación en Mercado Libre.
+        Si se provee catalog_product_id, usa modo catálogo (ML pone el título automáticamente).
         Retorna el ítem creado o None si falla.
         """
         if images is None:
@@ -199,7 +219,6 @@ class MercadoLibrePublisher:
             attributes = []
 
         payload = {
-            "title": title,
             "category_id": category_id,
             "price": int(price),
             "currency_id": "ARS",
@@ -209,17 +228,22 @@ class MercadoLibrePublisher:
             "condition": condition,
         }
 
+        if catalog_product_id:
+            payload["catalog_product_id"] = catalog_product_id
+            payload["family_name"] = family_name
+        else:
+            payload["title"] = title
+            if family_name:
+                payload["family_name"] = family_name
+
         if description:
             payload["description"] = {"plain_text": description}
 
         if images:
             payload["pictures"] = [{"source": url} for url in images if url]
 
-        if attributes:
+        if attributes and not catalog_product_id:
             payload["attributes"] = attributes
-
-        if family_name:
-            payload["family_name"] = family_name
 
         # Dejamos que la excepción suba para que la UI muestre el error real de ML
         result = self._post("/items", payload)
