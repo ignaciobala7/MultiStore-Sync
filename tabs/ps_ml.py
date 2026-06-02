@@ -28,6 +28,7 @@ from clients.mercadolibre_publish import (
     get_popular_categories_with_correct_ids,
 )
 from clients.prestashop import obtener_cotizacion_dolar
+from optimize_images import procesar_y_hostear
 
 
 def render():
@@ -311,6 +312,14 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                                 if v.strip()
                             ]
 
+                            st.write("• Subiendo imágenes a hosting público...")
+                            imgs_publicas = []
+                            for url in imgs:
+                                try:
+                                    imgs_publicas.append(procesar_y_hostear(url))
+                                except Exception:
+                                    imgs_publicas.append(url)
+
                             st.write("• Creando publicación...")
                             item = publisher.crear_item(
                                 title=p['name'],
@@ -318,7 +327,7 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                                 price=precio_final,
                                 stock=stock_ml,
                                 description=p.get('description', ''),
-                                images=imgs,
+                                images=imgs_publicas,
                                 attributes=attrs_ml,
                                 condition="new",
                                 listing_type_id="gold_special",
