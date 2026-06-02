@@ -250,10 +250,13 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                 st.divider()
                 st.subheader("Paso 5: Precio y comisión ML")
 
+                if "ps_ml_tc" not in st.session_state:
+                    st.session_state["ps_ml_tc"] = obtener_cotizacion_dolar()
+
                 tipo_de_cambio = st.number_input(
                     "Tipo de cambio USD → ARS:",
                     min_value=1.0,
-                    value=float(st.session_state.get("ps_ml_tc", 1200)),
+                    value=float(st.session_state["ps_ml_tc"]),
                     step=10.0,
                     key="ps_ml_tc",
                 )

@@ -24,7 +24,7 @@ def obtener_cotizacion_dolar() -> float:
         soup = BeautifulSoup(r.text, "html.parser")
         header = soup.find("header") or soup.find(id="header") or soup.find(class_="header")
         text = header.get_text(" ", strip=True) if header else r.text[:2000]
-        match = re.search(r"[Cc]otizaci[oó]n\s+d[oó]lar[:\s]+\$?([\d,.]+)", text)
+        match = re.search(r"Cotizaci.n\s+d.lar[:\s]+\$?([\d,.]+)", text)
         if match:
             return float(match.group(1).replace(",", ""))
     except Exception:
