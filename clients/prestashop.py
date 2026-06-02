@@ -8,6 +8,7 @@ en alta resolución para usarlas al publicar en Tiendanube.
 import re
 import requests
 
+
 PS_BASE_URL = "https://shop.infoandina.com"
 
 
@@ -156,9 +157,17 @@ class PrestaShopClient:
             if not name:
                 name = p.get("reference", sku)
 
-            # Descripción (mismo formato multilingüe)
-            desc_raw = p.get("description", [])
-            description = desc_raw[0].get("value", "") if isinstance(desc_raw, list) and desc_raw else ""
+            # Descripción: puede ser string HTML o lista multilingüe
+            desc_raw = p.get("description", "")
+            if isinstance(desc_raw, list) and desc_raw:
+                desc_html = desc_raw[0].get("value", "")
+            elif isinstance(desc_raw, str):
+                desc_html = desc_raw
+            else:
+                desc_html = ""
+            # Convertir HTML a texto plano para ML
+            description = re.sub(r"<[^>]+>", " ", desc_html).strip()
+            description = re.sub(r"\s+", " ", description)
 
             # Precio
             try:
