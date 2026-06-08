@@ -63,10 +63,16 @@ class TiendanubeClient:
         page = 1
 
         while True:
-            products = self._get(
-                "/products",
-                params={"page": page, "per_page": PAGE_SIZE, "fields": "id,variants"},
-            )
+            try:
+                products = self._get(
+                    "/products",
+                    params={"page": page, "per_page": PAGE_SIZE, "fields": "id,variants"},
+                )
+            except requests.exceptions.HTTPError as e:
+                # TN devuelve 404 cuando se pasa de la última página
+                if e.response is not None and e.response.status_code == 404:
+                    break
+                raise
 
             # La API devuelve lista vacía o [] cuando no hay más páginas
             if not products:
