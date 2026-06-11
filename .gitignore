@@ -3,4 +3,4 @@ ml_tokens.json
 venv/
 __pycache__/
 *.pyc
-skus_publicados_*.csv
+*.csv

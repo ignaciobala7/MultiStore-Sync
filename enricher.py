@@ -122,7 +122,7 @@ def enriquecer_producto(item: dict, description: str) -> dict | None:
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return None
+        return _descripcion_fallback(item, description)
 
     user_message = _construir_mensaje_usuario(item, description)
     prompt = f"{SYSTEM_PROMPT}\n\n{user_message}"
