@@ -82,8 +82,8 @@ class MercadoLibrePublisher:
         except Exception:
             pass
 
-    def _get(self, path: str, params: dict | None = None) -> dict | list:
-        """GET con token"""
+    def _get(self, path: str, params: dict | None = None, _retry: bool = True) -> dict | list:
+        """GET con token. Si recibe 401, refresca el token y reintenta una vez."""
         self._ensure_token_valid()
         headers = {"Authorization": f"Bearer {self.access_token}"}
         resp = requests.get(
@@ -92,11 +92,14 @@ class MercadoLibrePublisher:
             params=params,
             timeout=20,
         )
+        if resp.status_code == 401 and _retry:
+            self._refresh_token()
+            return self._get(path, params=params, _retry=False)
         resp.raise_for_status()
         return resp.json()
 
-    def _post(self, path: str, payload: dict) -> dict:
-        """POST con token. Lanza excepción con el mensaje real de la API de ML si hay error."""
+    def _post(self, path: str, payload: dict, _retry: bool = True) -> dict:
+        """POST con token. Si recibe 401, refresca el token y reintenta una vez."""
         self._ensure_token_valid()
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -108,6 +111,9 @@ class MercadoLibrePublisher:
             json=payload,
             timeout=20,
         )
+        if resp.status_code == 401 and _retry:
+            self._refresh_token()
+            return self._post(path, payload, _retry=False)
         if not resp.ok:
             try:
                 err = resp.json()
@@ -151,19 +157,22 @@ class MercadoLibrePublisher:
         except Exception:
             return []
 
-    def obtener_comision(self, price: float, category_id: str, listing_type_id: str = "gold_special") -> tuple[float, float]:
+    def obtener_comision(self, price: float, category_id: str, listing_type_id: str = "gold_special", catalog_listing: bool = False) -> tuple[float, float]:
         """
         Calcula comisión por categoría.
         Retorna: (porcentaje_comision, monto_comision)
         """
         try:
+            params = {
+                "price": price,
+                "category_id": category_id,
+                "listing_type_id": listing_type_id,
+            }
+            if catalog_listing:
+                params["catalog_listing"] = "true"
             data = self._get(
                 f"/sites/{SITE_ID}/listing_prices",
-                params={
-                    "price": price,
-                    "category_id": category_id,
-                    "listing_type_id": listing_type_id,
-                },
+                params=params,
             )
             sale_fee = data.get("sale_fee", {})
             pct = sale_fee.get("percentage", 0)

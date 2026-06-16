@@ -82,6 +82,12 @@ def render():
                 st.session_state["ps_ml_product"] = ps_prod_ml
                 st.session_state["ps_ml_images"] = ps_prod_ml.get("image_urls", [])
                 st.session_state["ps_ml_sku_query"] = sku_ps_ml
+                # Buscar precio con IVA en Flexxus
+                flexxus = st.session_state.get("flexxus")
+                flexxus_price = flexxus.get_precio(sku_ps_ml) if flexxus else None
+                st.session_state["ps_ml_flexxus_price"] = flexxus_price
+                # Resetear tipo de cambio para que se inicialice desde Flexxus
+                st.session_state.pop("ps_ml_tc", None)
                 st.rerun()
 
     # Solo continuar si hay un producto buscado que coincide con el input actual
@@ -91,12 +97,13 @@ def render():
     ):
         p = st.session_state["ps_ml_product"]
         imgs = st.session_state.get("ps_ml_images", [])
-        _render_pasos_2_a_5(p, imgs, publisher) 
+        flexxus_price = st.session_state.get("ps_ml_flexxus_price")
+        _render_pasos_2_a_5(p, imgs, publisher, flexxus_price)
 
 
 # ── Pasos 2 a 5 (solo se muestran cuando hay un producto encontrado) ──────────
 
-def _render_pasos_2_a_5(p, imgs, publisher):
+def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
     """
     Renderiza los pasos 2-5 del flujo PS → ML:
     categoría, atributos, precio con comisión, y publicación final.
@@ -252,7 +259,10 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                 st.subheader("Paso 5: Precio y comisión ML")
 
                 if "ps_ml_tc" not in st.session_state:
-                    st.session_state["ps_ml_tc"] = obtener_cotizacion_dolar()
+                    if flexxus_price:
+                        st.session_state["ps_ml_tc"] = flexxus_price["tipo_cambio"]
+                    else:
+                        st.session_state["ps_ml_tc"] = obtener_cotizacion_dolar()
 
                 tipo_de_cambio = st.number_input(
                     "Tipo de cambio USD → ARS:",
@@ -261,16 +271,28 @@ def _render_pasos_2_a_5(p, imgs, publisher):
                     step=10.0,
                     key="ps_ml_tc",
                 )
-                precio_ars = p['price'] * tipo_de_cambio
+
+                if flexxus_price:
+                    precio_usd_con_iva = flexxus_price["usd"] * (1 + flexxus_price["iva"])
+                    precio_ars = precio_usd_con_iva * tipo_de_cambio
+                else:
+                    precio_usd_con_iva = None
+                    precio_ars = p['price'] * tipo_de_cambio
+                    st.warning("⚠️ SKU no encontrado en Flexxus — precio sin IVA. Verificar manualmente.")
 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.metric("Precio PS (USD)", f"USD {p['price']:,.2f}")
+                    if flexxus_price:
+                        st.metric("Precio USD (con IVA)", f"USD {precio_usd_con_iva:,.2f}")
+                        st.caption(f"Base: USD {flexxus_price['usd']:,.2f} + IVA {flexxus_price['iva']*100:.0f}%")
+                    else:
+                        st.metric("Precio PS (USD, sin IVA)", f"USD {p['price']:,.2f}")
                     st.metric("Precio en ARS", f"${precio_ars:,.0f}")
                 with col_b:
                     with st.spinner("Calculando comisión..."):
                         pct_com, monto_com = publisher.obtener_comision(
-                            precio_ars, cat_id, "gold_special"
+                            precio_ars, cat_id, "gold_special",
+                            catalog_listing=bool(catalog_product_id),
                         )
                     st.metric("Comisión ML", f"${monto_com:,.2f} ({pct_com}%)")
                     if monto_com == 0:
@@ -314,11 +336,18 @@ def _render_pasos_2_a_5(p, imgs, publisher):
 
                             st.write("• Subiendo imágenes a hosting público...")
                             imgs_publicas = []
+                            imgs_fallidas = 0
                             for url in imgs:
                                 try:
                                     imgs_publicas.append(procesar_y_hostear(url))
                                 except Exception:
-                                    imgs_publicas.append(url)
+                                    imgs_fallidas += 1
+                            if imgs_fallidas:
+                                st.warning(f"⚠️ {imgs_fallidas} imagen/es no se pudieron subir a ImgBB y fueron omitidas.")
+                            if not imgs_publicas:
+                                s.update(label="❌ Sin imágenes", state="error")
+                                st.error("ML requiere al menos una imagen. No se pudo subir ninguna a ImgBB. Verificá que IMGBB_API_KEY esté configurada.")
+                                st.stop()
 
                             st.write("• Creando publicación...")
                             item = publisher.crear_item(

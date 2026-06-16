@@ -41,6 +41,7 @@ load_dotenv()
 from clients.mercadolibre import MercadoLibreClient, MercadoLibreAuthError
 from clients.tiendanube import TiendanubeClient
 from clients.prestashop import PrestaShopClient
+from clients.flexxus import FlexxusClient
 
 # Importar cada pestaña como módulo independiente
 from tabs import ml_tiendanube, ps_tiendanube, ps_ml, historial, config
@@ -111,6 +112,12 @@ def _init_session():
 
     # Cliente de PrestaShop/Infoandina (búsqueda de productos e imágenes por SKU)
     st.session_state.ps = PrestaShopClient(api_key=os.environ.get("PS_API_KEY", ""))
+
+    # Cliente de Flexxus (precios con IVA desde Excel exportado)
+    try:
+        st.session_state.flexxus = FlexxusClient()
+    except FileNotFoundError:
+        st.session_state.flexxus = None
 
     # Caché de SKUs de TN (se llena la primera vez que se usa la pestaña ML o PS)
     st.session_state.existing_skus: set[str] = set()
