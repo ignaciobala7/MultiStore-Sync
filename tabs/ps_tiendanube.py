@@ -83,13 +83,12 @@ def _render_preview_y_publicar(tn):
 
     st.success(f"Producto encontrado: **{p['name']}**")
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     col1.metric("Referencia (SKU)", p["reference"])
     col2.metric("Precio", f"${p['price']:,.2f}")
-    col3.metric("Imágenes disponibles", len(imgs))
 
     if imgs:
-        st.image(imgs[0], width=180, caption="Vista previa (primera imagen PS)")
+        st.image(imgs[0], width=180, caption="Vista previa")
 
     if p["stock"] <= 0:
         st.warning("Stock en 0 según PrestaShop. El producto se publicará con stock 0.")
