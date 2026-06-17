@@ -76,6 +76,7 @@ class PrestaShopClient:
                     "output_format": "JSON",
                     "display": "full",
                     "filter[reference]": sku,
+                    "filter[active]": 1,
                 },
                 timeout=15,
             )
@@ -141,6 +142,7 @@ class PrestaShopClient:
                     "output_format": "JSON",
                     "display": "full",
                     "filter[reference]": sku,
+                    "filter[active]": 1,
                 },
                 timeout=15,
             )
@@ -231,6 +233,7 @@ class PrestaShopClient:
                     "output_format": "JSON",
                     "display": "full",
                     "filter[reference]": sku,
+                    "filter[active]": 1,
                 },
                 timeout=15,
             )
