@@ -174,9 +174,8 @@ class MercadoLibrePublisher:
                 f"/sites/{SITE_ID}/listing_prices",
                 params=params,
             )
-            sale_fee = data.get("sale_fee", {})
-            pct = sale_fee.get("percentage", 0)
-            monto = sale_fee.get("amount", 0)
+            pct = data.get("sale_fee_details", {}).get("percentage_fee", 0)
+            monto = data.get("sale_fee_amount", 0)
             return pct, monto
         except Exception:
             return 0.0, 0.0
