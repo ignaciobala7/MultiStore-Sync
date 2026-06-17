@@ -389,6 +389,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
                                 listing_type_id="gold_special",
                                 family_name=family_name,
                                 catalog_product_id=catalog_product_id,
+                                seller_custom_field=p.get('reference', ''),
                             )
 
                             if item:

@@ -240,6 +240,7 @@ class MercadoLibrePublisher:
         listing_type_id: str = "gold_special",
         family_name: str = "",
         catalog_product_id: str = "",
+        seller_custom_field: str = "",
     ) -> dict | None:
         """
         Crea una publicación en Mercado Libre.
@@ -277,6 +278,9 @@ class MercadoLibrePublisher:
 
         if attributes and not catalog_product_id:
             payload["attributes"] = attributes
+
+        if seller_custom_field:
+            payload["seller_custom_field"] = seller_custom_field
 
         # Dejamos que la excepción suba para que la UI muestre el error real de ML
         result = self._post("/items", payload)
