@@ -225,6 +225,33 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
                     if catalog_product_id:
                         st.success(f"Catálogo: **{catalog_family_name}** ({catalog_product_id})")
 
+            # ── Ajuste automático de categoría desde catálogo ─────────────────
+            if catalog_product_id:
+                last_cpid = st.session_state.get("ps_ml_last_catalog_product_id", "")
+                if catalog_product_id != last_cpid:
+                    with st.spinner("Verificando categoría del producto en catálogo..."):
+                        cat_from_catalog = publisher.obtener_categoria_de_catalogo(
+                            catalog_product_id, product_name=catalog_family_name
+                        )
+                    st.session_state["ps_ml_last_catalog_product_id"] = catalog_product_id
+                    st.session_state["ps_ml_catalog_category_id"] = cat_from_catalog
+                cat_from_catalog = st.session_state.get("ps_ml_catalog_category_id")
+                if cat_from_catalog:
+                    if cat_from_catalog != cat_id:
+                        st.info(
+                            f"Categoría ajustada automáticamente al catálogo: **{cat_from_catalog}** "
+                            f"(la elegida manualmente era **{cat_id}**)"
+                        )
+                        cat_id = cat_from_catalog
+                else:
+                    st.warning(
+                        "⚠️ No se pudo verificar la categoría del catálogo. "
+                        "Se usará la categoría seleccionada manualmente."
+                    )
+            else:
+                st.session_state.pop("ps_ml_last_catalog_product_id", None)
+                st.session_state.pop("ps_ml_catalog_category_id", None)
+
             # ── Paso 4: Atributos de la categoría ────────────────────────────────
             st.divider()
             st.subheader("Paso 4: Completa los atributos requeridos")

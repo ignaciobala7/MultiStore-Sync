@@ -180,6 +180,31 @@ class MercadoLibrePublisher:
         except Exception:
             return 0.0, 0.0
 
+    def obtener_categoria_de_catalogo(self, catalog_product_id: str, product_name: str = "") -> str | None:
+        """
+        Devuelve el category_id real de un catalog_product_id.
+        Intento 1: /sites/MLA/search?catalog_product_id=... (requiere scope de búsqueda).
+        Intento 2 (fallback): domain_discovery con el nombre del producto.
+        Retorna None si ambos fallan.
+        """
+        try:
+            data = self._get(
+                f"/sites/{SITE_ID}/search",
+                params={"catalog_product_id": catalog_product_id, "limit": 1},
+            )
+            results = data.get("results", [])
+            if results and results[0].get("category_id"):
+                return results[0]["category_id"]
+        except Exception:
+            pass
+
+        if product_name:
+            cats = self.buscar_categorias(product_name, limit=1)
+            if cats:
+                return cats[0].get("category_id")
+
+        return None
+
     # ──────────────────────────────────────────────────────────────────────────
     # Creación de publicaciones
     # ──────────────────────────────────────────────────────────────────────────
