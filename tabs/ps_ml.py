@@ -110,10 +110,19 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
     """
     # Mostrar resumen del producto encontrado
     st.success(f"Producto encontrado: **{p['name']}**")
-    col1, col2, col3 = st.columns(3)
+    tc_resumen = (
+        flexxus_price["tipo_cambio"] if flexxus_price
+        else st.session_state.get("ps_ml_tc")
+    )
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Referencia (SKU)", p["reference"])
-    col2.metric("Precio PS", f"${p['price']:,.2f}")
-    col3.metric("Stock disponible", p["stock"])
+    col2.metric("Precio PS", f"USD {p['price']:,.2f}")
+    if tc_resumen:
+        col3.metric("Precio PS en ARS", f"${p['price'] * tc_resumen:,.0f}")
+        col3.caption(f"TC: {tc_resumen:,.0f}")
+    else:
+        col3.metric("Precio PS en ARS", "—")
+    col4.metric("Stock disponible", p["stock"])
     if imgs:
         st.image(imgs[0], width=180, caption="Vista previa")
 
@@ -324,14 +333,19 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
                     st.metric("Comisión ML", f"${monto_com:,.2f} ({pct_com}%)")
                     if monto_com == 0:
                         st.caption("⚠️ No se pudo calcular la comisión")
+                    else:
+                        st.caption("Solo informativa — no se suma al precio de publicación")
 
-                precio_final = precio_ars + monto_com
+                precio_final = flexxus_price["pesos"] if flexxus_price else precio_ars
                 col_x, col_y = st.columns(2)
                 with col_x:
-                    st.metric("Precio final en ML", f"${precio_final:,.0f} ARS")
+                    st.metric("Precio final en ML", f"${precio_final:,.2f} ARS")
                 with col_y:
                     st.write("")
-                    st.write("*Precio ARS + comisión*")
+                    if flexxus_price:
+                        st.write("*Lista 5 Flexxus con IVA (la comisión es solo informativa)*")
+                    else:
+                        st.write("*Precio PS × tipo de cambio (la comisión es solo informativa)*")
 
                 # ── Paso 6: Publicar en ML ────────────────────────────────────
                 st.divider()
