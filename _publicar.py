@@ -60,8 +60,9 @@ else:
 pct_com, monto_com = publisher.obtener_comision(
     precio_ars_base, CATEGORY_ID, LISTING_TYPE, catalog_listing=True
 )
-precio_final = precio_ars_base + monto_com
-print(f"  ✓ Comisión: {pct_com}% = ${monto_com:,.0f} → Precio final: ${precio_final:,.0f} ARS")
+precio_final = fx["pesos"] if fx else precio_ars_base
+print(f"  ✓ Comisión: {pct_com}% = ${monto_com:,.0f} (solo informativa)")
+print(f"  ✓ Precio final: ${precio_final:,.2f} ARS (Lista 5 Flexxus con IVA)")
 
 # ── Atributos ─────────────────────────────────────────────────────────────────
 print("\n[3/5] Extrayendo atributos...")

@@ -70,6 +70,24 @@ class MercadoLibreClient:
     # HTTP
     # ──────────────────────────────────────────────────────────────────────────
 
+    def _put(self, path: str, body: dict, _retry: bool = True) -> dict:
+        """PUT autenticado con renovación automática del token en caso de 401."""
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+        resp = requests.put(
+            f"{ML_BASE_URL}{path}",
+            headers=headers,
+            json=body,
+            timeout=20,
+        )
+        if resp.status_code == 401 and _retry:
+            self._refresh_access_token()
+            return self._put(path, body, _retry=False)
+        resp.raise_for_status()
+        return resp.json()
+
     def _get(self, path: str, params: dict | None = None, _retry: bool = True) -> dict:
         """
         GET autenticado con renovación automática del token en caso de 401.

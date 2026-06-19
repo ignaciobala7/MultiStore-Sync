@@ -264,6 +264,7 @@ class MercadoLibrePublisher:
 
         if catalog_product_id:
             payload["catalog_product_id"] = catalog_product_id
+            payload["catalog_listing"] = True
             payload["family_name"] = family_name
         else:
             payload["title"] = title
