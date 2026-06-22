@@ -282,8 +282,7 @@ class MercadoLibrePublisher:
 
         if seller_custom_field:
             payload["seller_custom_field"] = seller_custom_field
-            if not catalog_product_id:
-                payload["seller_sku"] = seller_custom_field
+            payload["seller_sku"] = seller_custom_field
 
         payload["sale_terms"] = [
             {"id": "WARRANTY_TYPE", "value_name": "Garantía del vendedor"},
