@@ -285,6 +285,18 @@ class MercadoLibrePublisher:
             if not catalog_product_id:
                 payload["seller_sku"] = seller_custom_field
 
+        payload["sale_terms"] = [
+            {"id": "WARRANTY_TYPE", "value_name": "Garantía del vendedor"},
+            {"id": "WARRANTY_TIME", "value_name": "6 meses"},
+            {"id": "INVOICE", "value_name": "Factura A"},
+        ]
+
+        payload["shipping"] = {
+            "mode": "me2",
+            "local_pick_up": True,
+            "free_shipping": price >= 32000,
+        }
+
         # Dejamos que la excepción suba para que la UI muestre el error real de ML
         result = self._post("/items", payload)
         return result
