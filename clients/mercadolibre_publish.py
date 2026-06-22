@@ -282,6 +282,7 @@ class MercadoLibrePublisher:
 
         if seller_custom_field:
             payload["seller_custom_field"] = seller_custom_field
+            payload["seller_sku"] = seller_custom_field
 
         # Dejamos que la excepción suba para que la UI muestre el error real de ML
         result = self._post("/items", payload)
