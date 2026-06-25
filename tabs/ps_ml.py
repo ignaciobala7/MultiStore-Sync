@@ -20,6 +20,7 @@ Módulos de soporte:
 """
 
 import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from clients.sku_tracker import SKUTracker
 from clients.mercadolibre_publish import (
@@ -475,11 +476,13 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                 st.write("• Subiendo imágenes a hosting público...")
                                 imgs_publicas = []
                                 imgs_fallidas = 0
-                                for url in imgs:
-                                    try:
-                                        imgs_publicas.append(procesar_y_hostear(url))
-                                    except Exception:
-                                        imgs_fallidas += 1
+                                with ThreadPoolExecutor(max_workers=5) as pool:
+                                    futuros = {pool.submit(procesar_y_hostear, url): url for url in imgs}
+                                    for futuro in as_completed(futuros):
+                                        try:
+                                            imgs_publicas.append(futuro.result())
+                                        except Exception:
+                                            imgs_fallidas += 1
                                 if imgs_fallidas:
                                     st.warning(f"⚠️ {imgs_fallidas} imagen/es no se pudieron subir a ImgBB y fueron omitidas.")
                                 if not imgs_publicas:
