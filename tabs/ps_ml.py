@@ -93,9 +93,9 @@ def render():
                 st.session_state["ps_ml_flexxus_price"] = flexxus_price
                 # Resetear tipo de cambio para que se inicialice desde Flexxus
                 st.session_state.pop("ps_ml_tc", None)
-                # Limpiar elecciones del tracker de búsquedas anteriores
+                # Limpiar elecciones y checks del tracker de búsquedas anteriores
                 for k in list(st.session_state.keys()):
-                    if k.startswith("ps_ml_choice_"):
+                    if k.startswith("ps_ml_choice_") or k.startswith("ps_ml_ml_checked_"):
                         del st.session_state[k]
                 st.rerun()
 
@@ -377,6 +377,28 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 # ── Verificar SKU en tracker ──────────────────────────────────────
                 sku_ref = p.get('reference', '').strip()
                 existing_record = tracker.get(sku_ref) if (tracker and sku_ref) else None
+
+                # Si no está en CSV, consultar ML por si fue publicado antes del tracker
+                if not existing_record and tracker and sku_ref:
+                    _ml_check_key = f"ps_ml_ml_checked_{sku_ref}"
+                    if not st.session_state.get(_ml_check_key):
+                        with st.spinner("Verificando publicaciones previas en ML..."):
+                            try:
+                                ml_items = st.session_state.ml.search_items_by_sku(sku_ref)
+                            except Exception:
+                                ml_items = []
+                        if ml_items:
+                            item_ml = ml_items[0]
+                            existing_record = tracker.save(
+                                sku=sku_ref,
+                                mla_id=item_ml.get("id", ""),
+                                catalog_product_id=item_ml.get("catalog_product_id", "") or "",
+                                titulo=item_ml.get("title", ""),
+                                precio_ars=item_ml.get("price", 0),
+                            )
+                        else:
+                            st.session_state[_ml_check_key] = True
+
                 _choice_key = f"ps_ml_choice_{sku_ref}"
                 _show_publish_btn = True
 

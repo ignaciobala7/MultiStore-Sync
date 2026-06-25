@@ -85,9 +85,13 @@ Tras publicar exitosamente, llama `tracker.save()` automáticamente.
 El estado de elección se guarda en session_state como `ps_ml_choice_{sku}` y
 se limpia al publicar o al buscar otro SKU.
 
-**Búsqueda en ML:** `GET /users/{user_id}/items/search?sku={seller_custom_field}`
-Permite recuperar el MLA de un SKU aunque no esté en el CSV local (útil para
-SKUs publicados antes de implementar el tracker).
+**Lookup retroactivo (SKUs publicados antes del tracker):**
+Si `tracker.get(sku)` devuelve None, el Paso 6 consulta ML automáticamente via
+`search_items_by_sku(sku)` antes de mostrar el botón de publicar.
+- Encuentra resultado → guarda en CSV y muestra advertencia con los 3 botones
+- No encuentra nada → flujo normal de publicación
+Para evitar llamadas repetidas en rerenders, marca `ps_ml_ml_checked_{sku} = True`
+en session_state. Esta key se limpia junto con `ps_ml_choice_*` al buscar un SKU nuevo.
 
 **Fixes aplicados post-implementación:**
 - `sku_tracker.py`: `verify_with_ml` captura excepciones sin relanzar — el error
