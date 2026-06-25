@@ -227,6 +227,12 @@ class MercadoLibrePublisher:
         except Exception:
             return []
 
+    def get_catalog_product(self, catalog_product_id: str) -> dict | None:
+        try:
+            return self._get(f"/products/{catalog_product_id}")
+        except Exception:
+            return None
+
     def crear_item(
         self,
         title: str,

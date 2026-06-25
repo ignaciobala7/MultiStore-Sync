@@ -99,6 +99,8 @@ def render():
                 for k in list(st.session_state.keys()):
                     if k.startswith("ps_ml_choice_") or k.startswith("ps_ml_ml_checked_"):
                         del st.session_state[k]
+                st.session_state.pop("ps_ml_catalog_attrs", None)
+                st.session_state.pop("ps_ml_attrs_confirmed", None)
                 st.rerun()
 
     # Solo continuar si hay un producto buscado que coincide con el input actual
@@ -249,12 +251,23 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
             if catalog_product_id:
                 last_cpid = st.session_state.get("ps_ml_last_catalog_product_id", "")
                 if catalog_product_id != last_cpid:
-                    with st.spinner("Verificando categoría del producto en catálogo..."):
+                    with st.spinner("Verificando categoría y atributos del producto en catálogo..."):
                         cat_from_catalog = publisher.obtener_categoria_de_catalogo(
                             catalog_product_id, product_name=catalog_family_name
                         )
+                        catalog_product_data = publisher.get_catalog_product(catalog_product_id)
                     st.session_state["ps_ml_last_catalog_product_id"] = catalog_product_id
                     st.session_state["ps_ml_catalog_category_id"] = cat_from_catalog
+                    if catalog_product_data:
+                        catalog_attrs_raw = catalog_product_data.get("attributes", [])
+                        st.session_state["ps_ml_catalog_attrs"] = {
+                            a["id"]: a.get("value_name") or a.get("value_id", "")
+                            for a in catalog_attrs_raw
+                            if a.get("value_name") or a.get("value_id")
+                        }
+                    else:
+                        st.session_state.pop("ps_ml_catalog_attrs", None)
+                    st.session_state.pop("ps_ml_attrs_confirmed", None)
                 cat_from_catalog = st.session_state.get("ps_ml_catalog_category_id")
                 if cat_from_catalog:
                     if cat_from_catalog != cat_id:
@@ -271,6 +284,8 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
             else:
                 st.session_state.pop("ps_ml_last_catalog_product_id", None)
                 st.session_state.pop("ps_ml_catalog_category_id", None)
+                st.session_state.pop("ps_ml_catalog_attrs", None)
+                st.session_state.pop("ps_ml_attrs_confirmed", None)
 
             # ── Paso 4: Atributos de la categoría ────────────────────────────────
             st.divider()
@@ -285,21 +300,34 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 required_attrs = [a for a in ml_attrs if a.get("tags", {}).get("required", False)]
                 st.write(f"**{len(required_attrs)} atributo/s requerido/s:**")
 
+                catalog_attrs = st.session_state.get("ps_ml_catalog_attrs", {})
+
                 attr_values = {}
                 for attr in required_attrs:
                     attr_id = attr.get("id", "")
                     attr_name = attr.get("name", attr_id)
-                    # Intentar pre-rellenar desde los datos del producto de PS
-                    auto_valor = None
-                    for k, v in p.items():
-                        if isinstance(v, str) and (attr_name.lower() in k.lower() or k.lower() in attr_name.lower()):
-                            auto_valor = v
-                            break
+                    # Pre-rellenar: primero desde catálogo ML, luego desde datos PS
+                    auto_valor = catalog_attrs.get(attr_id)
+                    if not auto_valor:
+                        for k, v in p.items():
+                            if isinstance(v, str) and (attr_name.lower() in k.lower() or k.lower() in attr_name.lower()):
+                                auto_valor = v
+                                break
                     attr_values[attr_id] = st.text_input(
                         f"**{attr_name}** ({attr_id}):",
                         value=auto_valor or "",
                         key=f"attr_{cat_id}_{attr_id}",
                     )
+
+                if st.button("✓ Confirmar atributos", type="primary", key="ps_ml_confirm_attrs"):
+                    st.session_state["ps_ml_attrs_confirmed"] = True
+                    st.rerun()
+
+                if not st.session_state.get("ps_ml_attrs_confirmed"):
+                    st.info("Completá los atributos y confirmá para continuar.")
+                    return
+
+                st.success("Atributos confirmados.")
 
                 # ── Paso 5: Precio con comisión ───────────────────────────────
                 st.divider()
