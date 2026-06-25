@@ -183,9 +183,10 @@ class MercadoLibreClient:
 
         if not ids:
             try:
+                # ?sku= es el parametro correcto para buscar por seller_custom_field (doc ML)
                 ids = self._get(
                     f"/users/{user_id}/items/search",
-                    params={"status": "active", "seller_custom_field": sku, "limit": 10},
+                    params={"status": "active", "sku": sku, "limit": 10},
                 ).get("results", [])
             except Exception:
                 pass
