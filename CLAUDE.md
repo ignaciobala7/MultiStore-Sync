@@ -131,6 +131,24 @@ El orden puede variar respecto al original pero ML permite reordenarlas después
 
 Esto cubre SKUs publicados antes de que existiera el tracker local.
 
+### Fixes sesión 2026-06-25
+
+**Bug: ps_ml_attrs_confirmed se reseteaba en cada re-render**
+El `else` en `_render_pasos_2_a_5` borraba `ps_ml_attrs_confirmed` en cada re-run.
+Fix: solo se limpia cuando hay transición real desde modo catálogo
+(`was_using_catalog`). Archivo: `tabs/ps_ml.py` — commit 1d9c833
+
+**Bug: ML 400 "fields [title, seller_sku] are invalid"**
+El GTIN matcheaba un producto del catálogo → ML auto-forzaba modo catálogo →
+`title` y `seller_sku` se volvían inválidos.
+Fix: `seller_sku` eliminado del payload permanentemente. Retry automático en
+`crear_item()` si ML rechaza con error que contiene "title" + "invalid": reintenta
+sin `title` ni `seller_sku`. Archivo: `clients/mercadolibre_publish.py` — commit 0e7b416
+
+**Pendiente: atributos ML 400 para categoría MLA7524 (Calculadoras)**
+ML requiere `seller_package_height/width/length/weight` + `VALUE_ADDED_TAX` +
+`IMPORT_DUTY`. El Paso 4 los tiene que mostrar y no filtrarlos antes del payload.
+
 ## Branches
 
 - `main` — stable/production
