@@ -306,7 +306,7 @@ def extraer_atributos(nombre_producto: str, atributos_requeridos: list[dict]) ->
     prompt = (
         "Dado el nombre de producto: \"" + nombre_producto + "\"\n"
         "Extraé los valores para estos atributos: " + attrs_desc + "\n"
-        "Respondé SOLO con un JSON válido sin texto extra. "
+        "Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin backticks. "
         "Usá el id del atributo como clave y el valor extraído como string. "
         "Si no podés determinar un valor con certeza, omití la clave. Ejemplo:\n"
         "{\"BRAND\": \"Casio\", \"MODEL\": \"FX-82\"}"
@@ -314,7 +314,7 @@ def extraer_atributos(nombre_producto: str, atributos_requeridos: list[dict]) ->
 
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256},
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 200},
     }).encode("utf-8")
 
     req = urllib.request.Request(
