@@ -100,6 +100,7 @@ def render():
                     if k.startswith("ps_ml_choice_") or k.startswith("ps_ml_ml_checked_"):
                         del st.session_state[k]
                 st.session_state.pop("ps_ml_catalog_attrs", None)
+                st.session_state.pop("ps_ml_gemini_attrs", None)
                 st.session_state.pop("ps_ml_attrs_confirmed", None)
                 st.rerun()
 
@@ -267,6 +268,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         }
                     else:
                         st.session_state.pop("ps_ml_catalog_attrs", None)
+                    st.session_state.pop("ps_ml_gemini_attrs", None)
                     st.session_state.pop("ps_ml_attrs_confirmed", None)
                 cat_from_catalog = st.session_state.get("ps_ml_catalog_category_id")
                 if cat_from_catalog:
@@ -285,6 +287,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 st.session_state.pop("ps_ml_last_catalog_product_id", None)
                 st.session_state.pop("ps_ml_catalog_category_id", None)
                 st.session_state.pop("ps_ml_catalog_attrs", None)
+                st.session_state.pop("ps_ml_gemini_attrs", None)
                 st.session_state.pop("ps_ml_attrs_confirmed", None)
 
             # ── Paso 4: Atributos de la categoría ────────────────────────────────
@@ -302,12 +305,25 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
                 catalog_attrs = st.session_state.get("ps_ml_catalog_attrs", {})
 
+                # Fallback Gemini: solo si no hay catálogo y aún no se intentó
+                if not catalog_attrs and "ps_ml_gemini_attrs" not in st.session_state:
+                    with st.spinner("Detectando atributos con IA..."):
+                        from enricher import extraer_atributos
+                        st.session_state["ps_ml_gemini_attrs"] = extraer_atributos(
+                            p["name"],
+                            [{"id": a.get("id", ""), "name": a.get("name", a.get("id", ""))} for a in required_attrs],
+                        )
+
+                gemini_attrs = st.session_state.get("ps_ml_gemini_attrs", {})
+                pre_fill = catalog_attrs if catalog_attrs else gemini_attrs
+                source = "catalog" if catalog_attrs else ("gemini" if gemini_attrs else "none")
+
                 attr_values = {}
                 for attr in required_attrs:
                     attr_id = attr.get("id", "")
                     attr_name = attr.get("name", attr_id)
-                    # Pre-rellenar: primero desde catálogo ML, luego desde datos PS
-                    auto_valor = catalog_attrs.get(attr_id)
+                    # Pre-rellenar: catálogo > Gemini > datos PS
+                    auto_valor = pre_fill.get(attr_id)
                     if not auto_valor:
                         for k, v in p.items():
                             if isinstance(v, str) and (attr_name.lower() in k.lower() or k.lower() in attr_name.lower()):
@@ -319,7 +335,8 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         key=f"attr_{cat_id}_{attr_id}",
                     )
 
-                if st.button("✓ Confirmar atributos", type="primary", key="ps_ml_confirm_attrs"):
+                btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
+                if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
                     st.session_state["ps_ml_attrs_confirmed"] = True
                     st.rerun()
 

@@ -292,6 +292,51 @@ def _descripcion_fallback(item: dict, description: str) -> dict:
     }
 
 
+def extraer_atributos(nombre_producto: str, atributos_requeridos: list[dict]) -> dict:
+    """
+    Dado el nombre de un producto y una lista de atributos requeridos [{id, name}],
+    pide a Gemini que extraiga los valores y devuelve {attr_id: valor}.
+    Retorna dict vacío si falla o si GEMINI_API_KEY no está configurada.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or not atributos_requeridos:
+        return {}
+
+    attrs_desc = ", ".join(f"{a['name']} (id: {a['id']})" for a in atributos_requeridos)
+    prompt = (
+        "Dado el nombre de producto: \"" + nombre_producto + "\"\n"
+        "Extraé los valores para estos atributos: " + attrs_desc + "\n"
+        "Respondé SOLO con un JSON válido sin texto extra. "
+        "Usá el id del atributo como clave y el valor extraído como string. "
+        "Si no podés determinar un valor con certeza, omití la clave. Ejemplo:\n"
+        "{\"BRAND\": \"Casio\", \"MODEL\": \"FX-82\"}"
+    )
+
+    body = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256},
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        f"{GEMINI_URL}?key={api_key}",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+        raw_text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        extracted = json.loads(raw_text)
+        return {k: str(v) for k, v in extracted.items() if v}
+    except Exception as e:
+        print(f"    [WARN] extraer_atributos Gemini: {type(e).__name__}: {e}")
+        return {}
+
+
 def limpiar_descripcion_ml(description: str) -> str:
     """
     Limpia la descripción cruda de ML eliminando el bloque de texto
