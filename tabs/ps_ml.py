@@ -336,6 +336,16 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         if not auto_valor:
                             if attr_id == "BRAND":
                                 auto_valor = p.get("manufacturer") or p.get("brand") or p.get("marca")
+                                if not auto_valor:
+                                    nombre = p.get("name", "")
+                                    marcas_conocidas = ["Casio", "HP", "Canon", "Sharp", "Citizen", "Texas"]
+                                    for marca in marcas_conocidas:
+                                        if marca.lower() in nombre.lower():
+                                            auto_valor = marca
+                                            break
+                                    if not auto_valor:
+                                        palabras = nombre.split()
+                                        auto_valor = palabras[1] if len(palabras) > 1 else ""
                             elif attr_id == "MODEL":
                                 auto_valor = p.get("reference") or p.get("sku")
                         st.session_state[attr_key] = auto_valor or ""
