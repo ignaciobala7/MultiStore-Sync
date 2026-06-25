@@ -103,6 +103,34 @@ en session_state. Esta key se limpia junto con `ps_ml_choice_*` al buscar un SKU
   delega al `_put` interno. El tab ps_ml.py usa este método en lugar de llamar
   a `_put` directamente.
 
+### EAN/GTIN desde Flexxus
+
+`FlexxusClient` tiene un método `get_ean(sku)` que devuelve el código de barras
+del artículo desde la columna `CODIGOBARRA` del Excel, o `None` si está vacío.
+Los valores vienen como float del Excel (ej: 192545215831.0) y se convierten a
+string limpio automáticamente.
+
+El EAN se busca al mismo tiempo que el precio (Paso 1) y se guarda en
+`st.session_state["ps_ml_ean"]`. Al publicar, se manda a ML como atributo
+`{"id": "GTIN", "value_name": ean}`.
+
+En modo catálogo, ML no acepta atributos arbitrarios pero sí acepta GTIN —
+`crear_item()` maneja esto separando el GTIN del resto de atributos.
+
+### Mejoras de performance
+
+Subida de imágenes paralela en `tabs/ps_ml.py` usando `concurrent.futures.ThreadPoolExecutor`
+(máximo 5 workers). Las imágenes se suben todas al mismo tiempo en lugar de una por una.
+El orden puede variar respecto al original pero ML permite reordenarlas después.
+
+### Búsqueda retroactiva de SKUs en ML
+
+`search_items_by_sku()` en `clients/mercadolibre.py` intenta dos parámetros en orden:
+1. `?seller_sku=` — para publicaciones en modo no-catálogo
+2. `?sku=` — para publicaciones en modo catálogo (busca por `seller_custom_field`)
+
+Esto cubre SKUs publicados antes de que existiera el tracker local.
+
 ## Branches
 
 - `main` — stable/production
