@@ -298,8 +298,8 @@ class MercadoLibrePublisher:
 
         if seller_custom_field:
             payload["seller_custom_field"] = seller_custom_field
-            if not catalog_product_id:
-                payload["seller_sku"] = seller_custom_field
+            # seller_sku es rechazado en modo catálogo (incluso auto-catálogo por GTIN)
+            # seller_custom_field es suficiente para rastrear el SKU
 
         payload["sale_terms"] = [
             {"id": "WARRANTY_TYPE", "value_name": "Garantía del vendedor"},
@@ -313,8 +313,18 @@ class MercadoLibrePublisher:
             "free_shipping": price >= 32000,
         }
 
-        # Dejamos que la excepción suba para que la UI muestre el error real de ML
-        result = self._post("/items", payload)
+        try:
+            result = self._post("/items", payload)
+        except Exception as e:
+            err_msg = str(e)
+            # ML puede auto-forzar catálogo si el GTIN matchea un producto del catálogo.
+            # En ese caso rechaza title y seller_sku — reintentamos sin esos campos.
+            if "title" in err_msg and "invalid" in err_msg.lower():
+                payload.pop("title", None)
+                payload.pop("seller_sku", None)
+                result = self._post("/items", payload)
+            else:
+                raise
         return result
 
     def subir_imagen(self, item_id: str, image_url: str) -> dict | None:
