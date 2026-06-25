@@ -169,16 +169,27 @@ class MercadoLibreClient:
 
     def search_items_by_sku(self, sku: str) -> list[dict]:
         """
-        Busca publicaciones activas que coincidan con el SKU (seller_custom_field).
+        Busca publicaciones activas por SKU.
+        Intenta seller_sku primero (items no-catálogo); si no encuentra,
+        intenta seller_custom_field (items en modo catálogo).
         Retorna lista de items con detalle completo.
         """
         user_id = self.get_user_id()
-        # Buscar por seller_sku en el endpoint de items del usuario
-        data = self._get(
+
+        ids: list[str] = self._get(
             f"/users/{user_id}/items/search",
             params={"status": "active", "seller_sku": sku, "limit": 10},
-        )
-        ids = data.get("results", [])
+        ).get("results", [])
+
+        if not ids:
+            try:
+                ids = self._get(
+                    f"/users/{user_id}/items/search",
+                    params={"status": "active", "seller_custom_field": sku, "limit": 10},
+                ).get("results", [])
+            except Exception:
+                pass
+
         items = []
         for item_id in ids:
             try:
