@@ -286,11 +286,14 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         "Se usará la categoría seleccionada manualmente."
                     )
             else:
+                # Solo limpiar attrs si veníamos de modo catálogo (transición, no cada re-render)
+                was_using_catalog = "ps_ml_last_catalog_product_id" in st.session_state
                 st.session_state.pop("ps_ml_last_catalog_product_id", None)
                 st.session_state.pop("ps_ml_catalog_category_id", None)
                 st.session_state.pop("ps_ml_catalog_attrs", None)
-                st.session_state.pop("ps_ml_gemini_attrs", None)
-                st.session_state.pop("ps_ml_attrs_confirmed", None)
+                if was_using_catalog:
+                    st.session_state.pop("ps_ml_gemini_attrs", None)
+                    st.session_state.pop("ps_ml_attrs_confirmed", None)
 
             # ── Paso 4: Atributos de la categoría ────────────────────────────────
             st.divider()
