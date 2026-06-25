@@ -92,6 +92,7 @@ def render():
                 flexxus = st.session_state.get("flexxus")
                 flexxus_price = flexxus.get_precio(sku_ps_ml) if flexxus else None
                 st.session_state["ps_ml_flexxus_price"] = flexxus_price
+                st.session_state["ps_ml_ean"] = flexxus.get_ean(sku_ps_ml) if flexxus else None
                 # Resetear tipo de cambio para que se inicialice desde Flexxus
                 st.session_state.pop("ps_ml_tc", None)
                 # Limpiar elecciones y checks del tracker de búsquedas anteriores
@@ -504,6 +505,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     family_name=family_name,
                                     catalog_product_id=catalog_product_id,
                                     seller_custom_field=p.get('reference', ''),
+                                    gtin=st.session_state.get("ps_ml_ean") or "",
                                 )
 
                                 if item:

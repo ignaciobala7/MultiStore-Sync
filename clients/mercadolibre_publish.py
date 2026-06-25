@@ -241,6 +241,7 @@ class MercadoLibrePublisher:
         family_name: str = "",
         catalog_product_id: str = "",
         seller_custom_field: str = "",
+        gtin: str = "",
     ) -> dict | None:
         """
         Crea una publicación en Mercado Libre.
@@ -277,8 +278,17 @@ class MercadoLibrePublisher:
         if images:
             payload["pictures"] = [{"source": url} for url in images if url]
 
-        if attributes and not catalog_product_id:
-            payload["attributes"] = attributes
+        if gtin:
+            attributes = list(attributes) + [{"id": "GTIN", "value_name": gtin}]
+
+        if attributes:
+            if catalog_product_id:
+                # En modo catálogo solo mandamos GTIN, no otros atributos
+                gtin_attrs = [a for a in attributes if a.get("id") == "GTIN"]
+                if gtin_attrs:
+                    payload["attributes"] = gtin_attrs
+            else:
+                payload["attributes"] = attributes
 
         if seller_custom_field:
             payload["seller_custom_field"] = seller_custom_field

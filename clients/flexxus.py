@@ -109,6 +109,21 @@ class FlexxusClient:
             "pesos": round(precio_pesos, 2),
         }
 
+    def get_ean(self, sku: str) -> str | None:
+        """
+        Devuelve el código de barras (EAN/GTIN) del artículo, o None si está vacío.
+        El valor puede venir como float del Excel (ej: 192545215831.0) — se convierte a string limpio.
+        """
+        if self._articulos is None:
+            return None
+        fila = self._articulos[self._articulos["CODIGOPARTICULAR"] == sku.strip().upper()]
+        if fila.empty:
+            return None
+        val = fila.iloc[0]["CODIGOBARRA"]
+        if pd.isna(val) or str(val).strip() in ("", "nan"):
+            return None
+        return str(int(float(val))) if str(val).replace(".", "").isdigit() else str(val).strip()
+
     def recargar(self):
         """
         Recarga el Excel desde disco. Útil si el operario actualizó
