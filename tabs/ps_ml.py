@@ -366,15 +366,6 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 if p['stock'] == 0:
                     st.warning("⚠️ El stock en PS es 0. ML requiere al menos 1 unidad para publicar — se enviará stock = 1.")
 
-                if not catalog_product_id:
-                    family_name = st.text_input(
-                        "Nombre de familia (requerido por ML si no usás catálogo):",
-                        value=p['name'],
-                        key="ps_ml_family_name",
-                    )
-                else:
-                    family_name = catalog_family_name
-
                 # ── Verificar SKU en tracker ──────────────────────────────────────
                 sku_ref = p.get('reference', '').strip()
                 existing_record = tracker.get(sku_ref) if (tracker and sku_ref) else None
@@ -463,6 +454,15 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         st.info(f"Publicando de todas formas (MLA existente: {existing_record['mla_id']})")
 
                 if _show_publish_btn:
+                    if not catalog_product_id:
+                        family_name = st.text_input(
+                            "Nombre de familia (requerido por ML si no usás catálogo):",
+                            value=p['name'],
+                            key="ps_ml_family_name",
+                        )
+                    else:
+                        family_name = catalog_family_name
+
                     if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
                         with st.status("Publicando en Mercado Libre...", expanded=True) as s:
                             try:
