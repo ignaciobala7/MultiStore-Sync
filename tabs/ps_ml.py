@@ -512,6 +512,23 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     item_id = item.get("id", "")
                                     permalink = item.get("permalink", "")
                                     st.write(f"• Publicación creada: {item_id}")
+                                    try:
+                                        ml_client = st.session_state.ml
+                                        ml_client.update_item(item_id, {
+                                            "sale_terms": [
+                                                {"id": "WARRANTY_TYPE", "value_name": "Garantía del vendedor"},
+                                                {"id": "WARRANTY_TIME", "value_name": "6 meses"},
+                                                {"id": "INVOICE", "value_name": "Factura A"},
+                                            ],
+                                            "shipping": {
+                                                "mode": "me2",
+                                                "local_pick_up": True,
+                                                "free_shipping": precio_final >= 32000,
+                                            },
+                                        })
+                                        st.write("• Garantía, factura y retiro confirmados.")
+                                    except Exception as e_patch:
+                                        st.warning(f"⚠️ Publicado pero no se pudo confirmar garantía/factura/retiro: {e_patch}")
                                     s.update(label="✅ Publicado en Mercado Libre!", state="complete")
                                     st.success(
                                         f"**ML ID:** {item_id}\n\n"
