@@ -320,27 +320,37 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 pre_fill = catalog_attrs if catalog_attrs else gemini_attrs
                 source = "catalog" if catalog_attrs else ("gemini" if gemini_attrs else "none")
 
+                # Inicializar keys en session_state antes de renderizar widgets
+                # (no usar value= en st.text_input para evitar conflictos con state existente)
+                for attr in required_attrs:
+                    attr_id = attr.get("id", "")
+                    attr_name = attr.get("name", attr_id)
+                    attr_key = f"attr_{cat_id}_{attr_id}"
+                    if attr_key not in st.session_state:
+                        auto_valor = pre_fill.get(attr_id)
+                        if not auto_valor:
+                            for k, v in p.items():
+                                if isinstance(v, str) and (attr_name.lower() in k.lower() or k.lower() in attr_name.lower()):
+                                    auto_valor = v
+                                    break
+                        st.session_state[attr_key] = auto_valor or ""
+
                 attr_values = {}
                 for attr in required_attrs:
                     attr_id = attr.get("id", "")
                     attr_name = attr.get("name", attr_id)
-                    # Pre-rellenar: catálogo > Gemini > datos PS
-                    auto_valor = pre_fill.get(attr_id)
-                    if not auto_valor:
-                        for k, v in p.items():
-                            if isinstance(v, str) and (attr_name.lower() in k.lower() or k.lower() in attr_name.lower()):
-                                auto_valor = v
-                                break
                     attr_values[attr_id] = st.text_input(
                         f"**{attr_name}** ({attr_id}):",
-                        value=auto_valor or "",
                         key=f"attr_{cat_id}_{attr_id}",
                     )
 
                 btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
                 if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
+                    st.session_state["ps_ml_attrs_values"] = {
+                        attr.get("id", ""): st.session_state.get(f"attr_{cat_id}_{attr.get('id', '')}", "")
+                        for attr in required_attrs
+                    }
                     st.session_state["ps_ml_attrs_confirmed"] = True
-                    st.rerun()
 
                 if not st.session_state.get("ps_ml_attrs_confirmed"):
                     st.info("Completá los atributos y confirmá para continuar.")
