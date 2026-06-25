@@ -60,6 +60,45 @@ The `MercadoLibrePublisher` in `tabs/ps_ml.py` is initialized by copying tokens 
 
 Pricing in PS→ML: base price comes from Flexxus (`precio_usd × (1 + iva) × tipo_de_cambio`) when available; falls back to PS price × exchange rate from `obtener_cotizacion_dolar()`. ML commission is fetched dynamically via `publisher.obtener_comision()` and added to the final listing price.
 
+### SKU→MLA Tracker
+
+Módulo para rastrear qué SKUs de PrestaShop ya tienen publicación en ML.
+
+**Archivo:** `clients/sku_tracker.py` — clase `SKUTracker`
+
+**Backend actual:** `sku_mla_map.csv` en la raíz del proyecto.
+Columnas: `sku, mla_id, catalog_product_id, titulo, precio_ars, fecha_publicacion, estado, ultima_verificacion`
+
+El backend está encapsulado en `_read_all` / `_write_all` — para migrar a
+Google Sheets o base de datos en el futuro, solo se reemplazan esos dos métodos.
+
+**Métodos:**
+- `get(sku)` → dict | None (búsqueda case-insensitive)
+- `save(sku, mla_id, catalog_product_id, titulo, precio_ars)` → crea o actualiza
+- `verify_with_ml(sku, ml_client)` → consulta ML y actualiza estado
+- `get_all()` → lista de todos los registros
+
+**Integración en `tabs/ps_ml.py` (Paso 6):**
+Antes de publicar, consulta el tracker. Si el SKU ya existe, muestra advertencia
+con tres opciones: Ver en ML / Actualizar precio y stock / Publicar de todas formas.
+Tras publicar exitosamente, llama `tracker.save()` automáticamente.
+El estado de elección se guarda en session_state como `ps_ml_choice_{sku}` y
+se limpia al publicar o al buscar otro SKU.
+
+**Búsqueda en ML:** `GET /users/{user_id}/items/search?sku={seller_custom_field}`
+Permite recuperar el MLA de un SKU aunque no esté en el CSV local (útil para
+SKUs publicados antes de implementar el tracker).
+
+**Fixes aplicados post-implementación:**
+- `sku_tracker.py`: `verify_with_ml` captura excepciones sin relanzar — el error
+  se loguea en consola de Streamlit pero no interrumpe el flujo de la UI.
+- `ps_ml.py`: al hacer nueva búsqueda exitosa, limpia todas las keys de
+  session_state que empiecen con `ps_ml_choice_` — cubre el caso de cambiar
+  de SKU sin haber llegado a publicar.
+- `mercadolibre.py`: nuevo método público `update_item(item_id, payload)` que
+  delega al `_put` interno. El tab ps_ml.py usa este método en lugar de llamar
+  a `_put` directamente.
+
 ## Branches
 
 - `main` — stable/production
