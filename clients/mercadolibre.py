@@ -187,6 +187,10 @@ class MercadoLibreClient:
                 pass
         return items
 
+    def update_item(self, item_id: str, payload: dict) -> dict:
+        """Actualiza campos de una publicación existente via PUT /items/{item_id}."""
+        return self._put(f"/items/{item_id}", payload)
+
     def get_item_description(self, item_id: str) -> str:
         """
         Devuelve la descripción en texto plano de una publicación.

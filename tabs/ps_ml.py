@@ -21,6 +21,7 @@ Módulos de soporte:
 
 import streamlit as st
 
+from clients.sku_tracker import SKUTracker
 from clients.mercadolibre_publish import (
     MercadoLibrePublisher,
     sugerir_terminos_busqueda,
@@ -59,6 +60,10 @@ def render():
     publisher.access_token = ml.access_token
     publisher.refresh_token = ml.refresh_token
 
+    if "ps_ml_tracker" not in st.session_state:
+        st.session_state["ps_ml_tracker"] = SKUTracker()
+    tracker = st.session_state["ps_ml_tracker"]
+
     # ── Paso 1: Buscar producto en PS ─────────────────────────────────────────
     st.subheader("Paso 1: Selecciona el producto en Infoandina")
 
@@ -88,6 +93,10 @@ def render():
                 st.session_state["ps_ml_flexxus_price"] = flexxus_price
                 # Resetear tipo de cambio para que se inicialice desde Flexxus
                 st.session_state.pop("ps_ml_tc", None)
+                # Limpiar elecciones del tracker de búsquedas anteriores
+                for k in list(st.session_state.keys()):
+                    if k.startswith("ps_ml_choice_"):
+                        del st.session_state[k]
                 st.rerun()
 
     # Solo continuar si hay un producto buscado que coincide con el input actual
@@ -98,12 +107,12 @@ def render():
         p = st.session_state["ps_ml_product"]
         imgs = st.session_state.get("ps_ml_images", [])
         flexxus_price = st.session_state.get("ps_ml_flexxus_price")
-        _render_pasos_2_a_5(p, imgs, publisher, flexxus_price)
+        _render_pasos_2_a_5(p, imgs, publisher, flexxus_price, tracker=tracker)
 
 
 # ── Pasos 2 a 5 (solo se muestran cuando hay un producto encontrado) ──────────
 
-def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
+def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
     """
     Renderiza los pasos 2-5 del flujo PS → ML:
     categoría, atributos, precio con comisión, y publicación final.
@@ -365,63 +374,138 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None):
                 else:
                     family_name = catalog_family_name
 
-                if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
-                    with st.status("Publicando en Mercado Libre...", expanded=True) as s:
-                        try:
-                            st.write("• Preparando atributos...")
-                            attrs_ml = [
-                                {"id": k, "value_name": v}
-                                for k, v in attr_values.items()
-                                if v.strip()
-                            ]
+                # ── Verificar SKU en tracker ──────────────────────────────────────
+                sku_ref = p.get('reference', '').strip()
+                existing_record = tracker.get(sku_ref) if (tracker and sku_ref) else None
+                _choice_key = f"ps_ml_choice_{sku_ref}"
+                _show_publish_btn = True
 
-                            st.write("• Subiendo imágenes a hosting público...")
-                            imgs_publicas = []
-                            imgs_fallidas = 0
-                            for url in imgs:
+                if existing_record:
+                    _choice = st.session_state.get(_choice_key)
+
+                    if _choice is None:
+                        _show_publish_btn = False
+                        mla_id_ex = existing_record["mla_id"]
+                        ml_url_ex = f"https://articulo.mercadolibre.com.ar/{mla_id_ex.replace('MLA', 'MLA-')}"
+                        st.warning(
+                            f"⚠️ Este SKU ya tiene una publicación registrada: **{mla_id_ex}** "
+                            f"— publicado el {existing_record.get('fecha_publicacion', '—')}, "
+                            f"estado: **{existing_record.get('estado', '—')}**"
+                        )
+                        col_v, col_u, col_f = st.columns(3)
+                        with col_v:
+                            st.link_button("👁️ Ver en ML", url=ml_url_ex, use_container_width=True)
+                        with col_u:
+                            if st.button("🔄 Actualizar precio y stock", use_container_width=True, key="ps_ml_tracker_update"):
+                                st.session_state[_choice_key] = "update"
+                                st.rerun()
+                        with col_f:
+                            if st.button("⚠️ Publicar de todas formas", use_container_width=True, key="ps_ml_tracker_force"):
+                                st.session_state[_choice_key] = "force"
+                                st.rerun()
+
+                    elif _choice == "update":
+                        _show_publish_btn = False
+                        mla_id_ex = existing_record["mla_id"]
+                        st.info(
+                            f"Vas a actualizar precio y stock de **{mla_id_ex}** "
+                            f"con los valores actuales: **${precio_final:,.0f} ARS**, stock: **{stock_ml}**."
+                        )
+                        col_ok, col_back = st.columns(2)
+                        with col_ok:
+                            if st.button("✅ Confirmar actualización", type="primary", key="ps_ml_confirm_update"):
                                 try:
-                                    imgs_publicas.append(procesar_y_hostear(url))
-                                except Exception:
-                                    imgs_fallidas += 1
-                            if imgs_fallidas:
-                                st.warning(f"⚠️ {imgs_fallidas} imagen/es no se pudieron subir a ImgBB y fueron omitidas.")
-                            if not imgs_publicas:
-                                s.update(label="❌ Sin imágenes", state="error")
-                                st.error("ML requiere al menos una imagen. No se pudo subir ninguna a ImgBB. Verificá que IMGBB_API_KEY esté configurada.")
-                                st.stop()
+                                    ml_client = st.session_state.ml
+                                    ml_client.update_item(
+                                        mla_id_ex,
+                                        {"price": int(precio_final), "available_quantity": stock_ml},
+                                    )
+                                    tracker.save(
+                                        sku=sku_ref,
+                                        mla_id=mla_id_ex,
+                                        catalog_product_id=existing_record.get("catalog_product_id", ""),
+                                        titulo=existing_record.get("titulo", p['name']),
+                                        precio_ars=precio_final,
+                                    )
+                                    st.success(f"✅ **{mla_id_ex}** actualizado — precio: ${precio_final:,.0f} ARS, stock: {stock_ml}")
+                                    st.session_state.pop(_choice_key, None)
+                                except Exception as exc:
+                                    st.error(f"Error al actualizar en ML: {exc}")
+                        with col_back:
+                            if st.button("← Volver", key="ps_ml_back_update"):
+                                st.session_state.pop(_choice_key, None)
+                                st.rerun()
 
-                            st.write("• Creando publicación...")
-                            item = publisher.crear_item(
-                                title=p['name'],
-                                category_id=cat_id,
-                                price=precio_final,
-                                stock=stock_ml,
-                                description=p.get('description', ''),
-                                images=imgs_publicas,
-                                attributes=attrs_ml,
-                                condition="new",
-                                listing_type_id="gold_special",
-                                family_name=family_name,
-                                catalog_product_id=catalog_product_id,
-                                seller_custom_field=p.get('reference', ''),
-                            )
+                    else:  # _choice == "force"
+                        st.info(f"Publicando de todas formas (MLA existente: {existing_record['mla_id']})")
 
-                            if item:
-                                item_id = item.get("id", "")
-                                permalink = item.get("permalink", "")
-                                st.write(f"• Publicación creada: {item_id}")
-                                s.update(label="✅ Publicado en Mercado Libre!", state="complete")
-                                st.success(
-                                    f"**ML ID:** {item_id}\n\n"
-                                    f"**Precio:** ${precio_final:,.2f}\n\n"
-                                    f"**Stock:** {p['stock']}\n\n"
-                                    f"**Categoría:** {selected_cat['category_name']}"
+                if _show_publish_btn:
+                    if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
+                        with st.status("Publicando en Mercado Libre...", expanded=True) as s:
+                            try:
+                                st.write("• Preparando atributos...")
+                                attrs_ml = [
+                                    {"id": k, "value_name": v}
+                                    for k, v in attr_values.items()
+                                    if v.strip()
+                                ]
+
+                                st.write("• Subiendo imágenes a hosting público...")
+                                imgs_publicas = []
+                                imgs_fallidas = 0
+                                for url in imgs:
+                                    try:
+                                        imgs_publicas.append(procesar_y_hostear(url))
+                                    except Exception:
+                                        imgs_fallidas += 1
+                                if imgs_fallidas:
+                                    st.warning(f"⚠️ {imgs_fallidas} imagen/es no se pudieron subir a ImgBB y fueron omitidas.")
+                                if not imgs_publicas:
+                                    s.update(label="❌ Sin imágenes", state="error")
+                                    st.error("ML requiere al menos una imagen. No se pudo subir ninguna a ImgBB. Verificá que IMGBB_API_KEY esté configurada.")
+                                    st.stop()
+
+                                st.write("• Creando publicación...")
+                                item = publisher.crear_item(
+                                    title=p['name'],
+                                    category_id=cat_id,
+                                    price=precio_final,
+                                    stock=stock_ml,
+                                    description=p.get('description', ''),
+                                    images=imgs_publicas,
+                                    attributes=attrs_ml,
+                                    condition="new",
+                                    listing_type_id="gold_special",
+                                    family_name=family_name,
+                                    catalog_product_id=catalog_product_id,
+                                    seller_custom_field=p.get('reference', ''),
                                 )
-                                st.write(f"[Ver publicación en ML]({permalink})")
-                                del st.session_state["ps_ml_product"]
-                            else:
-                                s.update(label="❌ Error al publicar", state="error")
-                                st.error("No se pudo crear la publicación. Verifica los datos.")
-                        except Exception as e:
-                            s.update(label="❌ Error", state="error")
-                            st.error(f"Error: {e}")
+
+                                if item:
+                                    item_id = item.get("id", "")
+                                    permalink = item.get("permalink", "")
+                                    st.write(f"• Publicación creada: {item_id}")
+                                    s.update(label="✅ Publicado en Mercado Libre!", state="complete")
+                                    st.success(
+                                        f"**ML ID:** {item_id}\n\n"
+                                        f"**Precio:** ${precio_final:,.2f}\n\n"
+                                        f"**Stock:** {p['stock']}\n\n"
+                                        f"**Categoría:** {selected_cat['category_name']}"
+                                    )
+                                    st.write(f"[Ver publicación en ML]({permalink})")
+                                    if tracker and sku_ref:
+                                        tracker.save(
+                                            sku=sku_ref,
+                                            mla_id=item_id,
+                                            catalog_product_id=catalog_product_id,
+                                            titulo=p['name'],
+                                            precio_ars=precio_final,
+                                        )
+                                    st.session_state.pop(_choice_key, None)
+                                    del st.session_state["ps_ml_product"]
+                                else:
+                                    s.update(label="❌ Error al publicar", state="error")
+                                    st.error("No se pudo crear la publicación. Verifica los datos.")
+                            except Exception as e:
+                                s.update(label="❌ Error", state="error")
+                                st.error(f"Error: {e}")
