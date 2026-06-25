@@ -128,7 +128,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
         flexxus_price["tipo_cambio"] if flexxus_price
         else st.session_state.get("ps_ml_tc")
     )
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Referencia (SKU)", p["reference"])
     col2.metric("Precio PS", f"USD {p['price']:,.2f}")
     if tc_resumen:
@@ -137,6 +137,8 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
     else:
         col3.metric("Precio PS en ARS", "—")
     col4.metric("Stock disponible", p["stock"])
+    ean = st.session_state.get("ps_ml_ean")
+    col5.metric("EAN", ean if ean else "Sin EAN")
     if imgs:
         st.image(imgs[0], width=180, caption="Vista previa")
 
