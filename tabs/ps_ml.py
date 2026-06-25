@@ -333,6 +333,11 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                 if isinstance(v, str) and (attr_name.lower() in k.lower() or k.lower() in attr_name.lower()):
                                     auto_valor = v
                                     break
+                        if not auto_valor:
+                            if attr_id == "BRAND":
+                                auto_valor = p.get("manufacturer") or p.get("brand") or p.get("marca")
+                            elif attr_id == "MODEL":
+                                auto_valor = p.get("reference") or p.get("sku")
                         st.session_state[attr_key] = auto_valor or ""
 
                 attr_values = {}
