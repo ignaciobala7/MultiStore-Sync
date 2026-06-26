@@ -32,6 +32,8 @@ from clients.mercadolibre_publish import (
 from clients.prestashop import obtener_cotizacion_dolar
 from optimize_images import procesar_y_hostear
 
+ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY"}
+
 
 def render():
     """Punto de entrada de la pestaña. Llamado desde app.py."""
@@ -307,8 +309,11 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
             else:
                 required_attrs = [
                     a for a in ml_attrs
-                    if a.get("tags", {}).get("required")
-                    or a.get("tags", {}).get("conditional_required")
+                    if a.get("id") not in ATTRS_BLACKLIST
+                    and (
+                        a.get("tags", {}).get("required")
+                        or a.get("tags", {}).get("conditional_required")
+                    )
                 ]
                 st.write(f"**{len(required_attrs)} atributo/s a completar:**")
 
