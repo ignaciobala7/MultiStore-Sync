@@ -305,8 +305,17 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
             if not ml_attrs:
                 st.warning("No se pudieron obtener atributos. Intenta con otra categoría.")
             else:
-                required_attrs = [a for a in ml_attrs if a.get("tags", {}).get("required", False)]
-                st.write(f"**{len(required_attrs)} atributo/s requerido/s:**")
+                required_attrs = [
+                    a for a in ml_attrs
+                    if not a.get("tags", {}).get("read_only")
+                    and not a.get("tags", {}).get("variation_attribute")
+                    and (
+                        a.get("tags", {}).get("required")
+                        or a.get("tags", {}).get("conditional_required")
+                        or (a.get("tags", {}).get("hidden") and not catalog_product_id)
+                    )
+                ]
+                st.write(f"**{len(required_attrs)} atributo/s a completar:**")
 
                 catalog_attrs = st.session_state.get("ps_ml_catalog_attrs", {})
 
