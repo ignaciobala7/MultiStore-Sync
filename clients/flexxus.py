@@ -109,6 +109,22 @@ class FlexxusClient:
             "pesos": round(precio_pesos, 2),
         }
 
+    def get_value_added_tax(self, sku: str) -> str | None:
+        """
+        Devuelve la alícuota de IVA como string para ML (ej: "21%", "10.5%", "Exento").
+        Convierte COEFICIENTE: 1.0 → "21%", 0.5 → "10.5%", 0.0 → "Exento".
+        """
+        if self._articulos is None:
+            return None
+        fila = self._articulos[self._articulos["CODIGOPARTICULAR"] == sku.strip().upper()]
+        if fila.empty:
+            return None
+        coef = float(fila.iloc[0]["COEFICIENTE"])
+        if coef == 0.0:
+            return "Exento"
+        pct = coef * 21
+        return f"{pct:g}%"
+
     def get_ean(self, sku: str) -> str | None:
         """
         Devuelve el código de barras (EAN/GTIN) del artículo, o None si está vacío.

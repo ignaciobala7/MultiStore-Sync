@@ -248,6 +248,8 @@ class MercadoLibrePublisher:
         catalog_product_id: str = "",
         seller_custom_field: str = "",
         gtin: str = "",
+        value_added_tax: str = "",
+        import_duty: str = "No aplica",
     ) -> dict | None:
         """
         Crea una publicación en Mercado Libre.
@@ -286,13 +288,17 @@ class MercadoLibrePublisher:
 
         if gtin:
             attributes = list(attributes) + [{"id": "GTIN", "value_name": gtin}]
+        if value_added_tax:
+            attributes = list(attributes) + [{"id": "VALUE_ADDED_TAX", "value_name": value_added_tax}]
+        attributes = list(attributes) + [{"id": "IMPORT_DUTY", "value_name": import_duty}]
 
         if attributes:
             if catalog_product_id:
-                # En modo catálogo solo mandamos GTIN, no otros atributos
-                gtin_attrs = [a for a in attributes if a.get("id") == "GTIN"]
-                if gtin_attrs:
-                    payload["attributes"] = gtin_attrs
+                # En modo catálogo solo mandamos atributos fiscales y GTIN
+                allowed = {"GTIN", "VALUE_ADDED_TAX", "IMPORT_DUTY"}
+                fiscal_attrs = [a for a in attributes if a.get("id") in allowed]
+                if fiscal_attrs:
+                    payload["attributes"] = fiscal_attrs
             else:
                 payload["attributes"] = attributes
 

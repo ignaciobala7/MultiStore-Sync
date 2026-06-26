@@ -95,6 +95,7 @@ def render():
                 flexxus_price = flexxus.get_precio(sku_ps_ml) if flexxus else None
                 st.session_state["ps_ml_flexxus_price"] = flexxus_price
                 st.session_state["ps_ml_ean"] = flexxus.get_ean(sku_ps_ml) if flexxus else None
+                st.session_state["ps_ml_vat"] = flexxus.get_value_added_tax(sku_ps_ml) if flexxus else None
                 # Resetear tipo de cambio para que se inicialice desde Flexxus
                 st.session_state.pop("ps_ml_tc", None)
                 # Limpiar elecciones y checks del tracker de búsquedas anteriores
@@ -371,6 +372,18 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         key=f"attr_{cat_id}_{attr_id}",
                     )
 
+                if not catalog_product_id:
+                    st.markdown("**Dimensiones del paquete (opcional):**")
+                    col_w, col_l, col_h, col_wt = st.columns(4)
+                    with col_w:
+                        st.number_input("Ancho (cm)", min_value=0.0, step=0.1, key="ps_ml_pkg_width")
+                    with col_l:
+                        st.number_input("Largo (cm)", min_value=0.0, step=0.1, key="ps_ml_pkg_length")
+                    with col_h:
+                        st.number_input("Altura (cm)", min_value=0.0, step=0.1, key="ps_ml_pkg_height")
+                    with col_wt:
+                        st.number_input("Peso (kg)", min_value=0.0, step=0.001, key="ps_ml_pkg_weight")
+
                 btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
                 if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
                     st.session_state["ps_ml_attrs_values"] = {
@@ -557,6 +570,18 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     for k, v in attr_values.items()
                                     if v.strip()
                                 ]
+                                if not catalog_product_id:
+                                    pkg_dims = {
+                                        "SELLER_PACKAGE_WIDTH": st.session_state.get("ps_ml_pkg_width", 0),
+                                        "SELLER_PACKAGE_LENGTH": st.session_state.get("ps_ml_pkg_length", 0),
+                                        "SELLER_PACKAGE_HEIGHT": st.session_state.get("ps_ml_pkg_height", 0),
+                                        "SELLER_PACKAGE_WEIGHT": st.session_state.get("ps_ml_pkg_weight", 0),
+                                    }
+                                    attrs_ml += [
+                                        {"id": k, "value_name": str(v)}
+                                        for k, v in pkg_dims.items()
+                                        if v and v > 0
+                                    ]
 
                                 st.write("• Subiendo imágenes a hosting público...")
                                 imgs_publicas = []
@@ -590,6 +615,8 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     catalog_product_id=catalog_product_id,
                                     seller_custom_field=p.get('reference', ''),
                                     gtin=st.session_state.get("ps_ml_ean") or "",
+                                    value_added_tax=st.session_state.get("ps_ml_vat") or "",
+                                    import_duty="No aplica",
                                 )
 
                                 if item:
