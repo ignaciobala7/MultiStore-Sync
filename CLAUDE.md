@@ -145,9 +145,30 @@ Fix: `seller_sku` eliminado del payload permanentemente. Retry automático en
 `crear_item()` si ML rechaza con error que contiene "title" + "invalid": reintenta
 sin `title` ni `seller_sku`. Archivo: `clients/mercadolibre_publish.py` — commit 0e7b416
 
-**Pendiente: atributos ML 400 para categoría MLA7524 (Calculadoras)**
-ML requiere `seller_package_height/width/length/weight` + `VALUE_ADDED_TAX` +
-`IMPORT_DUTY`. El Paso 4 los tiene que mostrar y no filtrarlos antes del payload.
+### Fixes sesión 2026-06-26
+
+**Filtro de atributos Paso 4 (ps_ml.py)**
+El filtro anterior solo mostraba `required: true`. Ahora incluye también
+`conditional_required: true`. Los atributos `hidden` (SELLER_PACKAGE_*) se
+muestran como inputs separados de dimensiones, solo cuando no hay
+`catalog_product_id` seleccionado.
+Una lista negra `ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX",
+"IMPORT_DUTY"}` excluye esos IDs del formulario visible (se mandan igual via
+`crear_item()`). Commits: 82d2584, 5451c80
+
+**IVA desde Flexxus y atributos fiscales en crear_item()**
+`FlexxusClient.get_value_added_tax(sku)` convierte `COEFICIENTE` del Excel a
+string para ML: `1.0 → "21%"`, `0.5 → "10.5%"`, `0.0 → "Exento"`. Se llama
+en Paso 1 junto con `get_ean()` y se guarda en `st.session_state["ps_ml_vat"]`.
+
+`crear_item()` tiene nuevos parámetros opcionales `value_added_tax: str = ""`
+e `import_duty: str = "No aplica"`. Siempre se incluyen en `attributes`.
+En modo catálogo el filtro permite pasar GTIN + VALUE_ADDED_TAX + IMPORT_DUTY
+(antes solo pasaba GTIN).
+
+Paso 4 muestra 4 inputs de dimensiones (ancho/largo/altura/peso en cm/kg)
+solo cuando no hay catálogo. Al publicar, los valores > 0 se agregan a
+`attrs_ml` como `SELLER_PACKAGE_WIDTH/LENGTH/HEIGHT/WEIGHT`. Commit: d7e89df
 
 ## Branches
 
