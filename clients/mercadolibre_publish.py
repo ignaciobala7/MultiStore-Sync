@@ -249,7 +249,7 @@ class MercadoLibrePublisher:
         seller_custom_field: str = "",
         gtin: str = "",
         value_added_tax: str = "",
-        import_duty: str = "No aplica",
+        import_duty: str = "",
     ) -> dict | None:
         """
         Crea una publicación en Mercado Libre.
@@ -290,7 +290,8 @@ class MercadoLibrePublisher:
             attributes = list(attributes) + [{"id": "GTIN", "value_name": gtin}]
         if value_added_tax:
             attributes = list(attributes) + [{"id": "VALUE_ADDED_TAX", "value_name": value_added_tax}]
-        attributes = list(attributes) + [{"id": "IMPORT_DUTY", "value_name": import_duty}]
+        if import_duty:
+            attributes = list(attributes) + [{"id": "IMPORT_DUTY", "value_name": import_duty}]
 
         if attributes:
             if catalog_product_id:

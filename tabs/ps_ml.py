@@ -305,6 +305,16 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
             with st.spinner("Obteniendo atributos de ML..."):
                 ml_attrs = publisher.obtener_atributos(cat_id)
 
+            import_duty_attr = next((a for a in ml_attrs if a.get("id") == "IMPORT_DUTY"), None)
+            import_duty_value = ""
+            if import_duty_attr:
+                for val in import_duty_attr.get("values", []) or []:
+                    val_name = (val.get("name") or "").lower()
+                    if "no" in val_name or "0" in val_name or "exento" in val_name:
+                        import_duty_value = val.get("name", "")
+                        break
+            st.session_state["ps_ml_import_duty"] = import_duty_value
+
             if not ml_attrs:
                 st.warning("No se pudieron obtener atributos. Intenta con otra categoría.")
             else:
@@ -376,13 +386,13 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     st.markdown("**Dimensiones del paquete (opcional):**")
                     col_w, col_l, col_h, col_wt = st.columns(4)
                     with col_w:
-                        st.number_input("Ancho (cm)", min_value=0.0, step=0.1, key="ps_ml_pkg_width")
+                        st.number_input("Ancho (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_width")
                     with col_l:
-                        st.number_input("Largo (cm)", min_value=0.0, step=0.1, key="ps_ml_pkg_length")
+                        st.number_input("Largo (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_length")
                     with col_h:
-                        st.number_input("Altura (cm)", min_value=0.0, step=0.1, key="ps_ml_pkg_height")
+                        st.number_input("Altura (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_height")
                     with col_wt:
-                        st.number_input("Peso (kg)", min_value=0.0, step=0.001, key="ps_ml_pkg_weight")
+                        st.number_input("Peso (g)", min_value=0.0, step=1.0, value=None, placeholder="10", key="ps_ml_pkg_weight")
 
                 btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
                 if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
@@ -572,16 +582,16 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                 ]
                                 if not catalog_product_id:
                                     pkg_dims = {
-                                        "SELLER_PACKAGE_WIDTH": st.session_state.get("ps_ml_pkg_width", 0),
-                                        "SELLER_PACKAGE_LENGTH": st.session_state.get("ps_ml_pkg_length", 0),
-                                        "SELLER_PACKAGE_HEIGHT": st.session_state.get("ps_ml_pkg_height", 0),
-                                        "SELLER_PACKAGE_WEIGHT": st.session_state.get("ps_ml_pkg_weight", 0),
+                                        "SELLER_PACKAGE_WIDTH": (st.session_state.get("ps_ml_pkg_width", 0), "cm"),
+                                        "SELLER_PACKAGE_LENGTH": (st.session_state.get("ps_ml_pkg_length", 0), "cm"),
+                                        "SELLER_PACKAGE_HEIGHT": (st.session_state.get("ps_ml_pkg_height", 0), "cm"),
+                                        "SELLER_PACKAGE_WEIGHT": (st.session_state.get("ps_ml_pkg_weight", 0), "g"),
                                     }
-                                    attrs_ml += [
-                                        {"id": k, "value_name": str(v)}
-                                        for k, v in pkg_dims.items()
-                                        if v and v > 0
-                                    ]
+                                    for attr_id, (v, unit) in pkg_dims.items():
+                                        if v and v > 0:
+                                            if isinstance(v, float) and v.is_integer():
+                                                v = int(v)
+                                            attrs_ml.append({"id": attr_id, "value_name": f"{v} {unit}"})
 
                                 st.write("• Subiendo imágenes a hosting público...")
                                 imgs_publicas = []
@@ -601,6 +611,8 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     st.stop()
 
                                 st.write("• Creando publicación...")
+                                _ean = st.session_state.get("ps_ml_ean")
+                                gtin_val = str(_ean) if _ean and str(_ean).isdigit() else ""
                                 item = publisher.crear_item(
                                     title=p['name'],
                                     category_id=cat_id,
@@ -614,9 +626,9 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     family_name=family_name,
                                     catalog_product_id=catalog_product_id,
                                     seller_custom_field=p.get('reference', ''),
-                                    gtin=st.session_state.get("ps_ml_ean") or "",
+                                    gtin=gtin_val,
                                     value_added_tax=st.session_state.get("ps_ml_vat") or "",
-                                    import_duty="No aplica",
+                                    import_duty=st.session_state.get("ps_ml_import_duty", ""),
                                 )
 
                                 if item:

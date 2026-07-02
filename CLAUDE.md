@@ -170,6 +170,32 @@ Paso 4 muestra 4 inputs de dimensiones (ancho/largo/altura/peso en cm/kg)
 solo cuando no hay catálogo. Al publicar, los valores > 0 se agregan a
 `attrs_ml` como `SELLER_PACKAGE_WIDTH/LENGTH/HEIGHT/WEIGHT`. Commit: d7e89df
 
+### Fixes sesión 2026-07-02: 3 errores de validación ML
+
+**SELLER_PACKAGE_* sin unidad**
+ML rechazaba estos atributos porque el `value_name` era un número pelado
+(ej. `"10"`) sin unidad. Ahora Paso 4 concatena la unidad al guardar:
+ancho/largo/altura → `"{valor} cm"`, peso → `"{valor} g"`. El input de peso
+se re-etiquetó de "(kg)" a "(g)" para que coincida con la unidad que ML
+espera (antes el label decía kg pero se mandaba como si fuera gramos).
+Los 4 inputs ahora usan `value=None, placeholder="10"` en vez de arrancar
+en `0.0`, para que quede claro qué formato se espera. Archivo: `tabs/ps_ml.py`
+
+**IMPORT_DUTY hardcodeado a "No aplica"**
+Ese string no es necesariamente un `value_name` válido para todas las
+categorías. Ahora, al obtener `ml_attrs` en Paso 4, se busca el atributo
+`IMPORT_DUTY` y se toma el primer valor cuyo nombre contenga "no", "0" o
+"exento" (case-insensitive), guardado en `st.session_state["ps_ml_import_duty"]`.
+Si no se encuentra ninguno, no se manda el atributo. `crear_item()` ahora
+tiene `import_duty: str = ""` (antes `"No aplica"`) y solo lo agrega a
+`attributes` si viene no vacío. Archivos: `tabs/ps_ml.py`,
+`clients/mercadolibre_publish.py`
+
+**GTIN no numérico**
+`ps_ml_ean` (viene de `FlexxusClient.get_ean()`) podía traer valores no
+puramente numéricos. Antes de pasarlo a `crear_item()`, Paso 5 ahora valida
+`str(ean).isdigit()`; si no lo es, se manda `gtin=""`. Archivo: `tabs/ps_ml.py`
+
 ## Branches
 
 - `main` — stable/production
