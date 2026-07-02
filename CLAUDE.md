@@ -170,43 +170,25 @@ Paso 4 muestra 4 inputs de dimensiones (ancho/largo/altura/peso en cm/kg)
 solo cuando no hay catálogo. Al publicar, los valores > 0 se agregan a
 `attrs_ml` como `SELLER_PACKAGE_WIDTH/LENGTH/HEIGHT/WEIGHT`. Commit: d7e89df
 
-### Fixes sesión 2026-07-02: 3 errores de validación ML
+### Fixes sesión 2026-07-02
 
-**SELLER_PACKAGE_* sin unidad**
-ML rechazaba estos atributos porque el `value_name` era un número pelado
-(ej. `"10"`) sin unidad. Ahora Paso 4 concatena la unidad al guardar:
-ancho/largo/altura → `"{valor} cm"`, peso → `"{valor} g"`. El input de peso
-sigue en kg (label "Peso (kg)", como lo carga el usuario) pero al publicar
-se convierte a gramos (`×1000`) antes de mandarlo, porque
-`SELLER_PACKAGE_WEIGHT` en ML espera gramos. Los 4 inputs ahora usan
-`value=None, placeholder="10"` en vez de arrancar en `0.0`, para que quede
-claro qué formato se espera. Archivo: `tabs/ps_ml.py`
+**SELLER_PACKAGE_* — unidades en dimensiones**
+Los inputs de alto/ancho/largo se mandan como `"{valor} cm"` y el peso
+se ingresa en kg y se convierte automáticamente a gramos para ML (`×1000`).
+Commits: ca3c2a2, d377b7b
 
-**IMPORT_DUTY hardcodeado a "No aplica"**
-Ese string no es necesariamente un `value_name` válido para todas las
-categorías. Ahora, al obtener `ml_attrs` en Paso 4, se busca el atributo
-`IMPORT_DUTY` y se toma el primer valor cuyo nombre contenga "no", "0" o
-"exento" (case-insensitive), guardado en `st.session_state["ps_ml_import_duty"]`.
-Si no se encuentra ninguno, no se manda el atributo. `crear_item()` ahora
-tiene `import_duty: str = ""` (antes `"No aplica"`) y solo lo agrega a
-`attributes` si viene no vacío. Archivos: `tabs/ps_ml.py`,
-`clients/mercadolibre_publish.py`
+**IMPORT_DUTY — valor dinámico desde ML**
+Ya no se hardcodea "No aplica". Se consulta `GET /categories/{id}/attributes`
+para obtener los valores válidos y se elige el que contenga "no"/"0"/"exento".
+Si no hay match, no se manda el campo. Commit: ca3c2a2
 
-**GTIN no numérico**
-`ps_ml_ean` (viene de `FlexxusClient.get_ean()`) podía traer valores no
-puramente numéricos. Antes de pasarlo a `crear_item()`, Paso 5 ahora valida
-`str(ean).isdigit()`; si no lo es, se manda `gtin=""`. Archivo: `tabs/ps_ml.py`
+**GTIN — validación numérica**
+Antes de mandar el EAN a ML se valida con `isdigit()`. Si no es numérico
+(ej: "LFDB00803") se ignora. Commit: ca3c2a2
 
-### Fix: búsqueda en catálogo ML devolvía muy pocos resultados
-
-`buscar_en_catalogo()` pedía `limit=6` y filtraba a solo `status == "active"`,
-por lo que el usuario veía 2-3 opciones aunque ML mostrara más matches en el
-flujo de publicación manual (algunos con status `under_review`, válidos igual
-para catálogo). Fix: `limit` default subió a 20 (Paso 3 en `ps_ml.py` pide
-20), y se sacó el filtro de status — ahora se listan todos los resultados que
-devuelve `/products/search`, mostrando el status entre paréntesis en el
-selectbox cuando no es `active` para que el usuario decida. Archivos:
-`clients/mercadolibre_publish.py`, `tabs/ps_ml.py`
+**Búsqueda catálogo ML — más resultados**
+El Paso 3 ahora pide 20 resultados en vez de 6 y no filtra por status
+(se muestra el status en el selector). Commit: 9468b60
 
 ## Branches
 
