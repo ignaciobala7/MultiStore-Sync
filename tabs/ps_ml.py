@@ -392,7 +392,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     with col_h:
                         st.number_input("Altura (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_height")
                     with col_wt:
-                        st.number_input("Peso (g)", min_value=0.0, step=1.0, value=None, placeholder="10", key="ps_ml_pkg_weight")
+                        st.number_input("Peso (kg)", min_value=0.0, step=0.001, value=None, placeholder="10", key="ps_ml_pkg_weight")
 
                 btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
                 if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
@@ -581,11 +581,13 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     if v.strip()
                                 ]
                                 if not catalog_product_id:
+                                    peso_kg = st.session_state.get("ps_ml_pkg_weight", 0)
                                     pkg_dims = {
                                         "SELLER_PACKAGE_WIDTH": (st.session_state.get("ps_ml_pkg_width", 0), "cm"),
                                         "SELLER_PACKAGE_LENGTH": (st.session_state.get("ps_ml_pkg_length", 0), "cm"),
                                         "SELLER_PACKAGE_HEIGHT": (st.session_state.get("ps_ml_pkg_height", 0), "cm"),
-                                        "SELLER_PACKAGE_WEIGHT": (st.session_state.get("ps_ml_pkg_weight", 0), "g"),
+                                        # el input está en kg; ML espera SELLER_PACKAGE_WEIGHT en gramos
+                                        "SELLER_PACKAGE_WEIGHT": (peso_kg * 1000 if peso_kg else 0, "g"),
                                     }
                                     for attr_id, (v, unit) in pkg_dims.items():
                                         if v and v > 0:

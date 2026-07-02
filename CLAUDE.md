@@ -176,10 +176,11 @@ solo cuando no hay catálogo. Al publicar, los valores > 0 se agregan a
 ML rechazaba estos atributos porque el `value_name` era un número pelado
 (ej. `"10"`) sin unidad. Ahora Paso 4 concatena la unidad al guardar:
 ancho/largo/altura → `"{valor} cm"`, peso → `"{valor} g"`. El input de peso
-se re-etiquetó de "(kg)" a "(g)" para que coincida con la unidad que ML
-espera (antes el label decía kg pero se mandaba como si fuera gramos).
-Los 4 inputs ahora usan `value=None, placeholder="10"` en vez de arrancar
-en `0.0`, para que quede claro qué formato se espera. Archivo: `tabs/ps_ml.py`
+sigue en kg (label "Peso (kg)", como lo carga el usuario) pero al publicar
+se convierte a gramos (`×1000`) antes de mandarlo, porque
+`SELLER_PACKAGE_WEIGHT` en ML espera gramos. Los 4 inputs ahora usan
+`value=None, placeholder="10"` en vez de arrancar en `0.0`, para que quede
+claro qué formato se espera. Archivo: `tabs/ps_ml.py`
 
 **IMPORT_DUTY hardcodeado a "No aplica"**
 Ese string no es necesariamente un `value_name` válido para todas las
