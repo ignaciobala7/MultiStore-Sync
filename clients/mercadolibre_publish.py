@@ -209,10 +209,13 @@ class MercadoLibrePublisher:
     # Creación de publicaciones
     # ──────────────────────────────────────────────────────────────────────────
 
-    def buscar_en_catalogo(self, query: str, limit: int = 5) -> list[dict]:
+    def buscar_en_catalogo(self, query: str, limit: int = 20) -> list[dict]:
         """
         Busca productos en el catálogo de ML.
         Retorna lista de {id, name, status} para que el usuario elija el correcto.
+        No filtra por status: ML puede devolver productos "under_review" que
+        igual son válidos para publicar en modo catálogo, y filtrarlos de más
+        ocultaba matches que sí aparecen al publicar manualmente desde ML.
         """
         try:
             data = self._get(
@@ -222,7 +225,6 @@ class MercadoLibrePublisher:
             return [
                 {"id": r.get("id"), "name": r.get("name"), "status": r.get("status")}
                 for r in data.get("results", [])
-                if r.get("status") == "active"
             ]
         except Exception:
             return []

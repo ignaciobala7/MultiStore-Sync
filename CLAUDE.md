@@ -197,6 +197,17 @@ tiene `import_duty: str = ""` (antes `"No aplica"`) y solo lo agrega a
 puramente numéricos. Antes de pasarlo a `crear_item()`, Paso 5 ahora valida
 `str(ean).isdigit()`; si no lo es, se manda `gtin=""`. Archivo: `tabs/ps_ml.py`
 
+### Fix: búsqueda en catálogo ML devolvía muy pocos resultados
+
+`buscar_en_catalogo()` pedía `limit=6` y filtraba a solo `status == "active"`,
+por lo que el usuario veía 2-3 opciones aunque ML mostrara más matches en el
+flujo de publicación manual (algunos con status `under_review`, válidos igual
+para catálogo). Fix: `limit` default subió a 20 (Paso 3 en `ps_ml.py` pide
+20), y se sacó el filtro de status — ahora se listan todos los resultados que
+devuelve `/products/search`, mostrando el status entre paréntesis en el
+selectbox cuando no es `active` para que el usuario decida. Archivos:
+`clients/mercadolibre_publish.py`, `tabs/ps_ml.py`
+
 ## Branches
 
 - `main` — stable/production

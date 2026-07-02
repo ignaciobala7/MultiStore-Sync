@@ -235,7 +235,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
             if st.button("🔎 Buscar en catálogo ML", key="ps_ml_buscar_catalogo"):
                 with st.spinner("Buscando en catálogo..."):
-                    resultados = publisher.buscar_en_catalogo(p['name'], limit=6)
+                    resultados = publisher.buscar_en_catalogo(p['name'], limit=20)
                 st.session_state["ps_ml_catalogo"] = resultados
 
             catalogo = st.session_state.get("ps_ml_catalogo")
@@ -246,8 +246,13 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 if not catalogo:
                     st.info("No se encontró el producto en el catálogo. Se publicará con título manual.")
                 else:
+                    st.caption(f"{len(catalogo)} resultado/s encontrado/s en el catálogo.")
+
+                    def _label(r):
+                        return r["name"] if r.get("status") == "active" else f"{r['name']} ({r.get('status', '?')})"
+
                     opciones = {"— Ninguno (usar título manual) —": ("", "")}
-                    opciones.update({r["name"]: (r["id"], r["name"]) for r in catalogo})
+                    opciones.update({_label(r): (r["id"], r["name"]) for r in catalogo})
                     sel = st.selectbox("Seleccioná el producto del catálogo:", list(opciones.keys()), key="ps_ml_catalogo_sel")
                     catalog_product_id, catalog_family_name = opciones[sel]
                     if catalog_product_id:
