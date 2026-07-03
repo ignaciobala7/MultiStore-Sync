@@ -19,6 +19,8 @@ Módulos de soporte:
                                       atributos, comisiones, auto-match
 """
 
+import re
+
 import streamlit as st
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -34,6 +36,37 @@ from optimize_images import procesar_y_hostear
 
 ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY", "GTIN"}
 PACKAGE_ATTR_IDS = {"SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH", "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT"}
+
+# Mapea los atributos de dimensiones "reales" del producto de catálogo (declaradas por el
+# fabricante, sin el prefijo SELLER_) a nuestras claves internas de sugerencia.
+_CATALOG_PKG_ATTR_MAP = {
+    "PACKAGE_WIDTH": "width",
+    "PACKAGE_HEIGHT": "height",
+    "PACKAGE_LENGTH": "length",
+    "PACKAGE_WEIGHT": "weight_kg",
+}
+
+
+def _parse_pkg_dims_from_catalog(attrs_raw):
+    """
+    Extrae ancho/alto/profundidad/peso reales del producto de catálogo (ej. "18.48 cm",
+    "381.01 g") para usarlos como piso mínimo sugerido del paquete — ML rechaza publicar
+    si el paquete declarado es más chico que el producto real.
+    Devuelve solo las claves que se pudieron parsear.
+    """
+    result = {}
+    for a in attrs_raw:
+        dim_key = _CATALOG_PKG_ATTR_MAP.get(a.get("id"))
+        if not dim_key:
+            continue
+        match = re.search(r"[\d.]+", a.get("value_name") or "")
+        if not match:
+            continue
+        valor = float(match.group())
+        if dim_key == "weight_kg":
+            valor = valor / 1000  # ML lo expresa en gramos
+        result[dim_key] = valor
+    return result
 
 
 def render():
@@ -343,8 +376,21 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                             for a in catalog_attrs_raw
                             if a.get("value_name") or a.get("value_id")
                         }
+                        pkg_suggested = _parse_pkg_dims_from_catalog(catalog_attrs_raw)
+                        st.session_state["ps_ml_catalog_pkg_dims"] = pkg_suggested
+                        # Precarga los inputs de dimensiones como "piso mínimo" editable —
+                        # solo al cambiar de producto de catálogo, no en cada re-render.
+                        for dim_key, widget_key in (
+                            ("width", "ps_ml_pkg_width"), ("height", "ps_ml_pkg_height"),
+                            ("length", "ps_ml_pkg_length"), ("weight_kg", "ps_ml_pkg_weight"),
+                        ):
+                            if dim_key in pkg_suggested:
+                                st.session_state[widget_key] = pkg_suggested[dim_key]
+                            else:
+                                st.session_state.pop(widget_key, None)
                     else:
                         st.session_state.pop("ps_ml_catalog_attrs", None)
+                        st.session_state.pop("ps_ml_catalog_pkg_dims", None)
                     st.session_state.pop("ps_ml_gemini_attrs", None)
                     st.session_state.pop("ps_ml_attrs_confirmed", None)
                 cat_from_catalog = st.session_state.get("ps_ml_catalog_category_id")
@@ -366,6 +412,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 st.session_state.pop("ps_ml_last_catalog_product_id", None)
                 st.session_state.pop("ps_ml_catalog_category_id", None)
                 st.session_state.pop("ps_ml_catalog_attrs", None)
+                st.session_state.pop("ps_ml_catalog_pkg_dims", None)
                 if was_using_catalog:
                     st.session_state.pop("ps_ml_gemini_attrs", None)
                     st.session_state.pop("ps_ml_attrs_confirmed", None)
@@ -466,6 +513,20 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
                 if pkg_required:
                     st.warning("⚠️ Esta categoría exige dimensiones de paquete (ancho, alto, profundidad y peso), incluso en modo catálogo. Completalas abajo antes de publicar.")
+
+                pkg_suggested = st.session_state.get("ps_ml_catalog_pkg_dims") or {}
+                if pkg_suggested:
+                    _labels = {"width": "ancho", "height": "alto", "length": "profundidad", "weight_kg": "peso"}
+                    _partes = [
+                        f"{_labels[k]} {v:.1f} cm" if k != "weight_kg" else f"{_labels[k]} {v:.3f} kg"
+                        for k, v in pkg_suggested.items()
+                    ]
+                    st.info(
+                        f"💡 ML sugiere estas medidas como piso mínimo del producto: {', '.join(_partes)}. "
+                        "Ya están precargadas abajo — podés agrandarlas si tu embalaje es más grande, "
+                        "pero ML rechaza valores menores a esto."
+                    )
+
                 st.markdown("**Dimensiones del paquete:**")
                 col_w, col_h, col_d, col_wt = st.columns(4)
                 with col_w:
