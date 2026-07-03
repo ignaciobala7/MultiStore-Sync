@@ -227,7 +227,31 @@ catálogo es el **atributo** `SELLER_SKU` (distinto del campo top-level
 `seller_sku`, que sigue rechazado por ML en catálogo). Ahora `crear_item()`
 agrega `{"id": "SELLER_SKU", "value_name": seller_custom_field}` a los
 atributos permitidos en ambos modos, sin tocar `seller_custom_field` (quedan
-sin relación entre sí, cada uno con su propio uso).
+sin relación entre sí, cada uno con su propio uso). Commit: c1e7d5b
+
+**Dimensiones mínimas sugeridas desde el catálogo**
+Error "seller_package_height are too small for the product dimensions":
+el paquete declarado era menor a las medidas reales del producto de catálogo
+(`PACKAGE_WIDTH/HEIGHT/LENGTH/WEIGHT`, sin prefijo `SELLER_`, vienen en el
+detalle de `get_catalog_product()`). Ahora se parsean (`_parse_pkg_dims_from_catalog`)
+y se precargan como piso mínimo editable en los inputs de Ancho/Alto/Profundidad/Peso
+del Paso 4, con un aviso de dónde salió el valor. Solo aplica con catalog_product_id
+seleccionado. Commit: 157c277
+
+**Precio de resumen (Paso 1) no reflejaba Flexxus**
+La tarjeta de resumen mostraba "Precio PS en ARS" = precio de PrestaShop × TC,
+incluso cuando había precio de Flexxus (Lista 5) disponible — confundía porque
+parecía el precio real pero no era el que se termina usando. Ahora, si hay
+`flexxus_price`, muestra "Precio Flexxus (Lista 5)" = `flexxus_price['pesos']`.
+
+**precio_final ignoraba el tipo de cambio editable (Paso 5)**
+`precio_final` usaba `flexxus_price["pesos"]`, calculado con el TC congelado
+del Excel al momento de cargarlo — si el usuario ajustaba el input "Tipo de
+cambio USD → ARS" (pensado justamente para eso), el ajuste se reflejaba en el
+`st.metric` de arriba pero no en el precio realmente publicado en ML. Ahora
+`precio_final = precio_ars`, que ya usa la base correcta (Flexxus con IVA, o
+PS de fallback) junto con el TC editable — consistente con lo que se muestra
+en pantalla.
 
 ## Branches
 

@@ -171,11 +171,20 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Referencia (SKU)", p["reference"])
     col2.metric("Precio PS", f"USD {p['price']:,.2f}")
-    if tc_resumen:
+    if flexxus_price:
+        # Flexxus (Lista 5) es la fuente de verdad cuando está disponible — mismo precio
+        # que termina usándose como precio_final más abajo. Mostrar el de PS acá confundía
+        # porque parecía ser el precio real cuando en realidad no se usa si hay Flexxus.
+        col3.metric("Precio Flexxus (Lista 5)", f"${flexxus_price['pesos']:,.0f}")
+        col3.caption(
+            f"USD {flexxus_price['usd']:,.2f} + IVA {flexxus_price['iva']*100:.1f}% "
+            f"· TC {flexxus_price['tipo_cambio']:,.0f}"
+        )
+    elif tc_resumen:
         col3.metric("Precio PS en ARS", f"${p['price'] * tc_resumen:,.0f}")
         col3.caption(f"TC: {tc_resumen:,.0f}")
     else:
-        col3.metric("Precio PS en ARS", "—")
+        col3.metric("Precio en ARS", "—")
     col4.metric("Stock disponible", p["stock"])
     ean = st.session_state.get("ps_ml_ean")
     col5.metric("EAN", ean if ean else "Sin EAN")
@@ -598,7 +607,10 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     else:
                         st.caption("Solo informativa — no se suma al precio de publicación")
 
-                precio_final = flexxus_price["pesos"] if flexxus_price else precio_ars
+                # precio_ars ya usa la base correcta (Flexxus con IVA, o PS de fallback) con
+                # el tipo_de_cambio editable de arriba — no volver a flexxus_price["pesos"],
+                # que queda congelado con el TC del Excel e ignora el ajuste manual del usuario.
+                precio_final = precio_ars
                 col_x, col_y = st.columns(2)
                 with col_x:
                     st.metric("Precio final en ML", f"${precio_final:,.2f} ARS")
