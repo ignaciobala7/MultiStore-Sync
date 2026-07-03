@@ -168,26 +168,30 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
         flexxus_price["tipo_cambio"] if flexxus_price
         else st.session_state.get("ps_ml_tc")
     )
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col4, col5 = st.columns(3)
     col1.metric("Referencia (SKU)", p["reference"])
-    col2.metric("Precio PS", f"USD {p['price']:,.2f}")
-    if flexxus_price:
-        # Flexxus (Lista 5) es la fuente de verdad cuando está disponible — mismo precio
-        # que termina usándose como precio_final más abajo. Mostrar el de PS acá confundía
-        # porque parecía ser el precio real cuando en realidad no se usa si hay Flexxus.
-        col3.metric("Precio Flexxus (Lista 5)", f"${flexxus_price['pesos']:,.0f}")
-        col3.caption(
-            f"USD {flexxus_price['usd']:,.2f} + IVA {flexxus_price['iva']*100:.1f}% "
-            f"· TC {flexxus_price['tipo_cambio']:,.0f}"
-        )
-    elif tc_resumen:
-        col3.metric("Precio PS en ARS", f"${p['price'] * tc_resumen:,.0f}")
-        col3.caption(f"TC: {tc_resumen:,.0f}")
-    else:
-        col3.metric("Precio en ARS", "—")
     col4.metric("Stock disponible", p["stock"])
     ean = st.session_state.get("ps_ml_ean")
     col5.metric("EAN", ean if ean else "Sin EAN")
+
+    col_ps_usd, col_ps_ars, col_fx_usd, col_fx_ars = st.columns(4)
+    col_ps_usd.metric("Precio PS (USD)", f"USD {p['price']:,.2f}")
+    if tc_resumen:
+        col_ps_ars.metric("Precio PS (ARS)", f"${p['price'] * tc_resumen:,.0f}")
+        col_ps_ars.caption(f"TC: {tc_resumen:,.0f}")
+    else:
+        col_ps_ars.metric("Precio PS (ARS)", "—")
+
+    if flexxus_price:
+        # Flexxus (Lista 5) es la fuente de verdad cuando está disponible — mismo precio
+        # que termina usándose como precio_final más abajo.
+        col_fx_usd.metric("Precio Flexxus (USD)", f"USD {flexxus_price['usd']:,.2f}")
+        col_fx_usd.caption(f"+ IVA {flexxus_price['iva']*100:.1f}%")
+        col_fx_ars.metric("Precio Flexxus (ARS)", f"${flexxus_price['pesos']:,.0f}")
+        col_fx_ars.caption(f"TC: {flexxus_price['tipo_cambio']:,.0f}")
+    else:
+        col_fx_usd.metric("Precio Flexxus (USD)", "—")
+        col_fx_ars.metric("Precio Flexxus (ARS)", "—")
     if imgs:
         st.image(imgs[0], width=180, caption="Vista previa")
 
