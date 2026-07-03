@@ -33,6 +33,7 @@ from clients.prestashop import obtener_cotizacion_dolar
 from optimize_images import procesar_y_hostear
 
 ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY"}
+PACKAGE_ATTR_IDS = {"SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH", "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT"}
 
 
 def render():
@@ -105,6 +106,9 @@ def render():
                 st.session_state.pop("ps_ml_catalog_attrs", None)
                 st.session_state.pop("ps_ml_gemini_attrs", None)
                 st.session_state.pop("ps_ml_attrs_confirmed", None)
+                for k in ("ps_ml_catalogo", "ps_ml_catalogo_sel_id", "ps_ml_catalogo_sel_name",
+                          "ps_ml_gtin_result", "ps_ml_gtin_checked", "ps_ml_use_gtin_match"):
+                    st.session_state.pop(k, None)
                 st.rerun()
 
     # Solo continuar si hay un producto buscado que coincide con el input actual
@@ -233,30 +237,93 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
             st.subheader("Paso 3: Producto en catálogo ML (recomendado)")
             st.caption("Muchas categorías requieren asociar la publicación al catálogo interno de ML. Si encontrás el producto, usalo.")
 
-            if st.button("🔎 Buscar en catálogo ML", key="ps_ml_buscar_catalogo"):
-                with st.spinner("Buscando en catálogo..."):
-                    resultados = publisher.buscar_en_catalogo(p['name'], limit=20)
-                st.session_state["ps_ml_catalogo"] = resultados
-
-            catalogo = st.session_state.get("ps_ml_catalogo")
             catalog_product_id = ""
             catalog_family_name = ""
 
-            if catalogo is not None:
-                if not catalogo:
-                    st.info("No se encontró el producto en el catálogo. Se publicará con título manual.")
-                else:
-                    st.caption(f"{len(catalogo)} resultado/s encontrado/s en el catálogo.")
+            def _pic_url(r):
+                pics = r.get("pictures") or []
+                return pics[0]["url"] if pics else None
 
-                    def _label(r):
-                        return r["name"] if r.get("status") == "active" else f"{r['name']} ({r.get('status', '?')})"
+            # Prioridad 1: búsqueda automática por EAN/GTIN — es lo más preciso
+            # (ML lo ofrece como primera opción, "Por código", en su propio flujo de publicación).
+            if ean and str(ean).isdigit() and "ps_ml_gtin_checked" not in st.session_state:
+                with st.spinner(f"Buscando en catálogo por EAN {ean}..."):
+                    st.session_state["ps_ml_gtin_result"] = publisher.buscar_en_catalogo_por_gtin(str(ean))
+                st.session_state["ps_ml_gtin_checked"] = True
 
-                    opciones = {"— Ninguno (usar título manual) —": ("", "")}
-                    opciones.update({_label(r): (r["id"], r["name"]) for r in catalogo})
-                    sel = st.selectbox("Seleccioná el producto del catálogo:", list(opciones.keys()), key="ps_ml_catalogo_sel")
-                    catalog_product_id, catalog_family_name = opciones[sel]
-                    if catalog_product_id:
-                        st.success(f"Catálogo: **{catalog_family_name}** ({catalog_product_id})")
+            gtin_match = st.session_state.get("ps_ml_gtin_result")
+            usar_gtin = st.session_state.get("ps_ml_use_gtin_match", True)
+
+            if gtin_match and usar_gtin:
+                col_img, col_info = st.columns([1, 5])
+                with col_img:
+                    url = _pic_url(gtin_match)
+                    if url:
+                        st.image(url, width=70)
+                with col_info:
+                    st.success(f"✅ Encontrado por EAN **{ean}**: **{gtin_match['name']}** ({gtin_match['id']})")
+                    if st.button("✖ No es este producto — buscar por nombre", key="ps_ml_rechazar_gtin"):
+                        st.session_state["ps_ml_use_gtin_match"] = False
+                        st.rerun()
+                catalog_product_id = gtin_match["id"]
+                catalog_family_name = gtin_match["name"]
+            else:
+                if ean and str(ean).isdigit() and not gtin_match:
+                    st.caption(f"No se encontró coincidencia en el catálogo por EAN {ean}.")
+                elif not ean:
+                    st.caption("Sin EAN cargado para este SKU — no se puede buscar por código.")
+
+                # Nota: la API de catálogo de ML no acepta búsqueda por SKU propio —
+                # el catálogo es global entre vendedores, no conoce tu SKU interno.
+                # Solo admite palabra clave (q) o código universal (product_identifier / EAN).
+                st.caption(
+                    "ℹ️ No es posible buscar por tu SKU interno: el catálogo de ML es global "
+                    "y solo admite búsqueda por EAN/GTIN o por nombre."
+                )
+
+                if st.button("🔎 Buscar en catálogo por nombre", key="ps_ml_buscar_catalogo"):
+                    with st.spinner("Buscando en catálogo..."):
+                        st.session_state["ps_ml_catalogo"] = publisher.buscar_en_catalogo(p['name'], limit=20)
+
+                catalogo = st.session_state.get("ps_ml_catalogo")
+
+                if catalogo is not None:
+                    if not catalogo:
+                        st.info("No se encontró el producto en el catálogo. Se publicará con título manual.")
+                    else:
+                        st.caption(f"{len(catalogo)} resultado/s encontrado/s en el catálogo.")
+                        sel_id = st.session_state.get("ps_ml_catalogo_sel_id", "")
+
+                        if sel_id and st.button("— Ninguno (usar título manual) —", key="ps_ml_catalogo_sel_none"):
+                            st.session_state["ps_ml_catalogo_sel_id"] = ""
+                            st.session_state["ps_ml_catalogo_sel_name"] = ""
+                            st.rerun()
+
+                        for r in catalogo:
+                            col_img, col_info, col_btn = st.columns([1, 5, 2])
+                            with col_img:
+                                url = _pic_url(r)
+                                if url:
+                                    st.image(url, width=60)
+                            with col_info:
+                                label = r["name"] if r.get("status") == "active" else f"{r['name']} ({r.get('status', '?')})"
+                                st.write(label)
+                            with col_btn:
+                                is_sel = sel_id == r["id"]
+                                if st.button(
+                                    "✓ Elegido" if is_sel else "Elegir",
+                                    key=f"ps_ml_sel_{r['id']}",
+                                    disabled=is_sel,
+                                ):
+                                    st.session_state["ps_ml_catalogo_sel_id"] = r["id"]
+                                    st.session_state["ps_ml_catalogo_sel_name"] = r["name"]
+                                    st.rerun()
+
+                        sel_id = st.session_state.get("ps_ml_catalogo_sel_id", "")
+                        if sel_id:
+                            catalog_product_id = sel_id
+                            catalog_family_name = st.session_state.get("ps_ml_catalogo_sel_name", "")
+                            st.success(f"Catálogo: **{catalog_family_name}** ({catalog_product_id})")
 
             # ── Ajuste automático de categoría desde catálogo ─────────────────
             if catalog_product_id:
@@ -326,11 +393,17 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 required_attrs = [
                     a for a in ml_attrs
                     if a.get("id") not in ATTRS_BLACKLIST
+                    and a.get("id") not in PACKAGE_ATTR_IDS
                     and (
                         a.get("tags", {}).get("required")
                         or a.get("tags", {}).get("conditional_required")
                     )
                 ]
+                pkg_required = any(
+                    a.get("id") in PACKAGE_ATTR_IDS
+                    and (a.get("tags", {}).get("required") or a.get("tags", {}).get("conditional_required"))
+                    for a in ml_attrs
+                )
                 st.write(f"**{len(required_attrs)} atributo/s a completar:**")
 
                 catalog_attrs = st.session_state.get("ps_ml_catalog_attrs", {})
@@ -387,17 +460,18 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         key=f"attr_{cat_id}_{attr_id}",
                     )
 
-                if not catalog_product_id:
-                    st.markdown("**Dimensiones del paquete (opcional):**")
-                    col_w, col_l, col_h, col_wt = st.columns(4)
-                    with col_w:
-                        st.number_input("Ancho (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_width")
-                    with col_l:
-                        st.number_input("Largo (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_length")
-                    with col_h:
-                        st.number_input("Altura (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_height")
-                    with col_wt:
-                        st.number_input("Peso (kg)", min_value=0.0, step=0.001, value=None, placeholder="10", key="ps_ml_pkg_weight")
+                if pkg_required:
+                    st.warning("⚠️ Esta categoría exige dimensiones de paquete (ancho, alto, profundidad y peso), incluso en modo catálogo. Completalas abajo antes de publicar.")
+                st.markdown("**Dimensiones del paquete:**")
+                col_w, col_h, col_d, col_wt = st.columns(4)
+                with col_w:
+                    st.number_input("Ancho (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_width")
+                with col_h:
+                    st.number_input("Alto (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_height")
+                with col_d:
+                    st.number_input("Profundidad (cm)", min_value=0.0, step=0.1, value=None, placeholder="10", key="ps_ml_pkg_length")
+                with col_wt:
+                    st.number_input("Peso (kg)", min_value=0.0, step=0.001, value=None, placeholder="10", key="ps_ml_pkg_weight")
 
                 btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
                 if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
@@ -585,20 +659,19 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     for k, v in attr_values.items()
                                     if v.strip()
                                 ]
-                                if not catalog_product_id:
-                                    peso_kg = st.session_state.get("ps_ml_pkg_weight", 0)
-                                    pkg_dims = {
-                                        "SELLER_PACKAGE_WIDTH": (st.session_state.get("ps_ml_pkg_width", 0), "cm"),
-                                        "SELLER_PACKAGE_LENGTH": (st.session_state.get("ps_ml_pkg_length", 0), "cm"),
-                                        "SELLER_PACKAGE_HEIGHT": (st.session_state.get("ps_ml_pkg_height", 0), "cm"),
-                                        # el input está en kg; ML espera SELLER_PACKAGE_WEIGHT en gramos
-                                        "SELLER_PACKAGE_WEIGHT": (peso_kg * 1000 if peso_kg else 0, "g"),
-                                    }
-                                    for attr_id, (v, unit) in pkg_dims.items():
-                                        if v and v > 0:
-                                            if isinstance(v, float) and v.is_integer():
-                                                v = int(v)
-                                            attrs_ml.append({"id": attr_id, "value_name": f"{v} {unit}"})
+                                peso_kg = st.session_state.get("ps_ml_pkg_weight", 0)
+                                pkg_dims = {
+                                    "SELLER_PACKAGE_WIDTH": (st.session_state.get("ps_ml_pkg_width", 0), "cm"),
+                                    "SELLER_PACKAGE_LENGTH": (st.session_state.get("ps_ml_pkg_length", 0), "cm"),
+                                    "SELLER_PACKAGE_HEIGHT": (st.session_state.get("ps_ml_pkg_height", 0), "cm"),
+                                    # el input está en kg; ML espera SELLER_PACKAGE_WEIGHT en gramos
+                                    "SELLER_PACKAGE_WEIGHT": (peso_kg * 1000 if peso_kg else 0, "g"),
+                                }
+                                for attr_id, (v, unit) in pkg_dims.items():
+                                    if v and v > 0:
+                                        if isinstance(v, float) and v.is_integer():
+                                            v = int(v)
+                                        attrs_ml.append({"id": attr_id, "value_name": f"{v} {unit}"})
 
                                 st.write("• Subiendo imágenes a hosting público...")
                                 imgs_publicas = []

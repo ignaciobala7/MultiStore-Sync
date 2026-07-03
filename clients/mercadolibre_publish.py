@@ -211,8 +211,8 @@ class MercadoLibrePublisher:
 
     def buscar_en_catalogo(self, query: str, limit: int = 20) -> list[dict]:
         """
-        Busca productos en el catálogo de ML.
-        Retorna lista de {id, name, status} para que el usuario elija el correcto.
+        Busca productos en el catálogo de ML por palabra clave.
+        Retorna lista de {id, name, status, pictures} para que el usuario elija el correcto.
         No filtra por status: ML puede devolver productos "under_review" que
         igual son válidos para publicar en modo catálogo, y filtrarlos de más
         ocultaba matches que sí aparecen al publicar manualmente desde ML.
@@ -223,11 +223,41 @@ class MercadoLibrePublisher:
                 params={"site_id": SITE_ID, "q": query, "limit": limit},
             )
             return [
-                {"id": r.get("id"), "name": r.get("name"), "status": r.get("status")}
+                {
+                    "id": r.get("id"),
+                    "name": r.get("name"),
+                    "status": r.get("status"),
+                    "pictures": r.get("pictures") or [],
+                }
                 for r in data.get("results", [])
             ]
         except Exception:
             return []
+
+    def buscar_en_catalogo_por_gtin(self, gtin: str) -> dict | None:
+        """
+        Busca un producto en el catálogo de ML por EAN/GTIN (product_identifier).
+        Es más preciso que la búsqueda por palabra clave: el propio ML lo ofrece
+        como primera opción en su flujo de publicación ("Por código").
+        Devuelve un único match {id, name, status, pictures} o None si no hay resultado.
+        """
+        try:
+            data = self._get(
+                "/products/search",
+                params={"site_id": SITE_ID, "product_identifier": gtin},
+            )
+            resultados = data.get("results", [])
+            if not resultados:
+                return None
+            r = resultados[0]
+            return {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "status": r.get("status"),
+                "pictures": r.get("pictures") or [],
+            }
+        except Exception:
+            return None
 
     def get_catalog_product(self, catalog_product_id: str) -> dict | None:
         try:
@@ -297,8 +327,13 @@ class MercadoLibrePublisher:
 
         if attributes:
             if catalog_product_id:
-                # En modo catálogo solo mandamos atributos fiscales y GTIN
-                allowed = {"GTIN", "VALUE_ADDED_TAX", "IMPORT_DUTY"}
+                # En modo catálogo solo mandamos atributos fiscales, GTIN y dimensiones de paquete
+                # (algunas categorías exigen SELLER_PACKAGE_* aunque el resto venga del catálogo)
+                allowed = {
+                    "GTIN", "VALUE_ADDED_TAX", "IMPORT_DUTY",
+                    "SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH",
+                    "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT",
+                }
                 fiscal_attrs = [a for a in attributes if a.get("id") in allowed]
                 if fiscal_attrs:
                     payload["attributes"] = fiscal_attrs
