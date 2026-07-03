@@ -168,11 +168,13 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
         flexxus_price["tipo_cambio"] if flexxus_price
         else st.session_state.get("ps_ml_tc")
     )
-    col1, col4, col5 = st.columns(3)
+    # Misma cantidad de columnas en ambas filas para que los bordes alineen entre sí.
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Referencia (SKU)", p["reference"])
-    col4.metric("Stock disponible", p["stock"])
+    col2.metric("Stock disponible", p["stock"])
     ean = st.session_state.get("ps_ml_ean")
-    col5.metric("EAN", ean if ean else "Sin EAN")
+    col3.metric("EAN", ean if ean else "Sin EAN")
+    # col4 queda vacía a propósito, alineada arriba de "Precio Flexxus (ARS)"
 
     col_ps_usd, col_ps_ars, col_fx_usd, col_fx_ars = st.columns(4)
     col_ps_usd.metric("Precio PS (USD)", f"USD {p['price']:,.2f}")
@@ -186,7 +188,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
         # Flexxus (Lista 5) es la fuente de verdad cuando está disponible — mismo precio
         # que termina usándose como precio_final más abajo.
         col_fx_usd.metric("Precio Flexxus (USD)", f"USD {flexxus_price['usd']:,.2f}")
-        col_fx_usd.caption(f"+ IVA {flexxus_price['iva']*100:.1f}%")
+        col_fx_usd.caption(f"IVA {flexxus_price['iva']*100:.1f}%")
         col_fx_ars.metric("Precio Flexxus (ARS)", f"${flexxus_price['pesos']:,.0f}")
         col_fx_ars.caption(f"TC: {flexxus_price['tipo_cambio']:,.0f}")
     else:
