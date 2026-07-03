@@ -32,7 +32,7 @@ from clients.mercadolibre_publish import (
 from clients.prestashop import obtener_cotizacion_dolar
 from optimize_images import procesar_y_hostear
 
-ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY"}
+ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY", "GTIN"}
 PACKAGE_ATTR_IDS = {"SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH", "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT"}
 
 
@@ -405,6 +405,10 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     for a in ml_attrs
                 )
                 st.write(f"**{len(required_attrs)} atributo/s a completar:**")
+                if ean and str(ean).isdigit():
+                    st.caption(f"ℹ️ GTIN se toma automáticamente del EAN de Flexxus: **{ean}**")
+                else:
+                    st.caption("ℹ️ GTIN: sin EAN numérico disponible en Flexxus, se publicará sin GTIN.")
 
                 catalog_attrs = st.session_state.get("ps_ml_catalog_attrs", {})
 
