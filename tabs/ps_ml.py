@@ -69,6 +69,34 @@ def _parse_pkg_dims_from_catalog(attrs_raw):
     return result
 
 
+_PKG_FIELD_LABELS = {
+    "seller_package_width": "Ancho",
+    "seller_package_length": "Profundidad",
+    "seller_package_height": "Alto",
+    "seller_package_weight": "Peso",
+}
+
+
+def _mensaje_error_publicacion(err_msg: str) -> str:
+    """
+    Traduce el error de ML a algo accionable. Para "packaging attributes [...] are
+    too small for the product dimensions": ML no expone el mínimo real por API para
+    todos los productos de catálogo (algunos no tienen PACKAGE_WIDTH/HEIGHT/LENGTH/WEIGHT
+    cargados) — solo indica qué campo rechazó, hay que agrandarlo a mano y reintentar.
+    """
+    match = re.search(r"packaging attributes \[([^\]]+)\] are too small", err_msg, re.IGNORECASE)
+    if match:
+        campos = [c.strip().lower() for c in match.group(1).split(",")]
+        etiquetas = [_PKG_FIELD_LABELS.get(c, c) for c in campos]
+        return (
+            f"⚠️ ML rechazó **{', '.join(etiquetas)}** por ser menor al tamaño real del producto. "
+            "Este producto de catálogo no expone su medida real por API, así que no hay un mínimo "
+            "exacto para sugerir acá — subí ese valor en el Paso 4 (probá de a poco: +1-2 cm o "
+            "+50 g) y reintentá publicar."
+        )
+    return f"Error: {err_msg}"
+
+
 def render():
     """Punto de entrada de la pestaña. Llamado desde app.py."""
     st.header("Infoandina (PrestaShop) → Mercado Libre")
@@ -838,4 +866,4 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     st.error("No se pudo crear la publicación. Verifica los datos.")
                             except Exception as e:
                                 s.update(label="❌ Error", state="error")
-                                st.error(f"Error: {e}")
+                                st.error(_mensaje_error_publicacion(str(e)))
