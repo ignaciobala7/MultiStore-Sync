@@ -21,8 +21,10 @@ Cómo usar este módulo:
   print(precio)  # → {"usd": 44.27, "iva": 0.21, "tipo_cambio": 1460, "pesos": 64640.65}
 """
 
-import pandas as pd
+import re
 from pathlib import Path
+
+import pandas as pd
 
 # Ruta al Excel exportado desde Flexxus.
 # El archivo debe estar en la raíz del proyecto con este nombre exacto.
@@ -128,7 +130,10 @@ class FlexxusClient:
     def get_ean(self, sku: str) -> str | None:
         """
         Devuelve el código de barras (EAN/GTIN) del artículo, o None si está vacío.
-        El valor puede venir como float del Excel (ej: 192545215831.0) — se convierte a string limpio.
+        El valor puede venir como float del Excel (ej: 192545215831.0) — se convierte a
+        string limpio. Algunos códigos vienen con una letra de prefijo antes del EAN
+        numérico real (ej: "L6939554923562") — se descarta esa letra y se devuelve
+        solo la parte numérica, ya que ML/GTIN requiere solo dígitos.
         """
         if self._articulos is None:
             return None
@@ -138,7 +143,13 @@ class FlexxusClient:
         val = fila.iloc[0]["CODIGOBARRA"]
         if pd.isna(val) or str(val).strip() in ("", "nan"):
             return None
-        return str(int(float(val))) if str(val).replace(".", "").isdigit() else str(val).strip()
+        val_str = str(val).strip()
+        if val_str.replace(".", "").isdigit():
+            return str(int(float(val_str)))
+        match = re.match(r"^[A-Za-z]+(\d+)$", val_str)
+        if match:
+            return match.group(1)
+        return val_str
 
     def recargar(self):
         """
