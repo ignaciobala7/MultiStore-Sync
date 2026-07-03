@@ -324,13 +324,19 @@ class MercadoLibrePublisher:
             attributes = list(attributes) + [{"id": "VALUE_ADDED_TAX", "value_name": value_added_tax}]
         if import_duty:
             attributes = list(attributes) + [{"id": "IMPORT_DUTY", "value_name": import_duty}]
+        if seller_custom_field:
+            # El campo top-level "seller_sku" es rechazado en modo catálogo (incluso auto-catálogo
+            # por GTIN). La forma correcta de cargar el SKU propio en catálogo es el atributo
+            # SELLER_SKU (lo que ML muestra como "Código de identificación (SKU)" en el editor) —
+            # se puede mandar en ambos modos sin problema.
+            attributes = list(attributes) + [{"id": "SELLER_SKU", "value_name": seller_custom_field}]
 
         if attributes:
             if catalog_product_id:
-                # En modo catálogo solo mandamos atributos fiscales, GTIN y dimensiones de paquete
+                # En modo catálogo solo mandamos atributos fiscales, GTIN, SKU y dimensiones de paquete
                 # (algunas categorías exigen SELLER_PACKAGE_* aunque el resto venga del catálogo)
                 allowed = {
-                    "GTIN", "VALUE_ADDED_TAX", "IMPORT_DUTY",
+                    "GTIN", "VALUE_ADDED_TAX", "IMPORT_DUTY", "SELLER_SKU",
                     "SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH",
                     "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT",
                 }
@@ -342,8 +348,7 @@ class MercadoLibrePublisher:
 
         if seller_custom_field:
             payload["seller_custom_field"] = seller_custom_field
-            # seller_sku es rechazado en modo catálogo (incluso auto-catálogo por GTIN)
-            # seller_custom_field es suficiente para rastrear el SKU
+            # Independiente del atributo SELLER_SKU de arriba; se mantiene para uso interno
 
         payload["sale_terms"] = [
             {"id": "WARRANTY_TYPE", "value_name": "Garantía del vendedor"},

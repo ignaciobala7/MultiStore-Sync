@@ -190,6 +190,45 @@ Antes de mandar el EAN a ML se valida con `isdigit()`. Si no es numérico
 El Paso 3 ahora pide 20 resultados en vez de 6 y no filtra por status
 (se muestra el status en el selector). Commit: 9468b60
 
+### Fixes sesión 2026-07-03
+
+**SELLER_PACKAGE_* aceptado en modo catálogo**
+Antes `crear_item()` descartaba estos atributos en modo catálogo (solo dejaba
+GTIN/VALUE_ADDED_TAX/IMPORT_DUTY), asumiendo que el catálogo siempre trae las
+dimensiones. Algunas categorías las exigen igual (error 400 "seller_package_*
+are all required"). Ahora se incluyen en el `allowed` set de modo catálogo.
+Paso 4 muestra los 4 campos de dimensiones siempre (antes se ocultaban con
+catálogo seleccionado), renombrados **Ancho/Alto/Profundidad/Peso**, y avisa
+con un warning si `ml_attrs` marca alguno como `required`/`conditional_required`.
+Commit: d054fb5
+
+**Búsqueda de catálogo por EAN/GTIN (prioridad sobre nombre)**
+Nuevo método `buscar_en_catalogo_por_gtin()` en `mercadolibre_publish.py` usa
+`product_identifier` (mismo parámetro que la pantalla "Por código" de ML).
+Paso 3 lo intenta automáticamente si Flexxus devolvió un EAN numérico, antes
+de la búsqueda manual por nombre. Búsqueda por SKU propio no es posible: la
+API de catálogo de ML solo acepta `q` o `product_identifier`, no conoce SKUs
+internos de vendedor. Los resultados por nombre ahora muestran miniatura
+(`pictures[0].url`) + botón "Elegir" en vez de un selectbox de texto.
+Commit: d054fb5
+
+**Campo GTIN duplicado en Paso 4**
+El listado de atributos requeridos incluía un input de texto libre para GTIN,
+redundante con el que ya arma `crear_item()` automáticamente desde el EAN de
+Flexxus — podía mandar el atributo GTIN duplicado en el payload. Se agregó
+`"GTIN"` a `ATTRS_BLACKLIST` (mismo tratamiento que VALUE_ADDED_TAX/IMPORT_DUTY,
+que también se resuelven por fuera del listado genérico). Commit: 81d1946
+
+**SKU propio no aparecía en publicaciones de catálogo (SELLER_SKU)**
+El código solo mandaba `seller_custom_field` (top-level), que ML no usa para
+poblar el campo "Código de identificación (SKU)" visible en el editor de la
+publicación ni para la búsqueda `?seller_sku=`. La forma correcta en modo
+catálogo es el **atributo** `SELLER_SKU` (distinto del campo top-level
+`seller_sku`, que sigue rechazado por ML en catálogo). Ahora `crear_item()`
+agrega `{"id": "SELLER_SKU", "value_name": seller_custom_field}` a los
+atributos permitidos en ambos modos, sin tocar `seller_custom_field` (quedan
+sin relación entre sí, cada uno con su propio uso).
+
 ## Branches
 
 - `main` — stable/production
