@@ -547,12 +547,12 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 elif gtin_required:
                     ean_raw = st.session_state.get("ps_ml_ean_raw") or ""
                     if ean_raw:
-                        st.warning(f"⚠️ El EAN de Flexxus (**{ean_raw}**) no tiene formato de código de barras válido y esta categoría exige GTIN. Se precargó tal cual está en Flexxus (con letras si las tiene) — probá publicar así o corregilo:")
+                        st.warning(f"⚠️ El EAN de Flexxus (**{ean_raw}**) no tiene formato de código de barras válido. Se precargó tal cual está en Flexxus (con letras si las tiene) — probá publicar así, corregilo, o dejalo vacío para publicar sin GTIN:")
                     else:
-                        st.warning("⚠️ Esta categoría exige GTIN y no hay EAN cargado en Flexxus — ingresalo manualmente:")
+                        st.warning("⚠️ Esta categoría suele exigir GTIN y no hay EAN cargado en Flexxus — completalo si lo tenés, o dejalo vacío para publicar sin GTIN:")
                     if "ps_ml_gtin_manual" not in st.session_state:
                         st.session_state["ps_ml_gtin_manual"] = ean_raw
-                    st.text_input("GTIN manual (se manda tal cual, aunque no sea puramente numérico):", key="ps_ml_gtin_manual")
+                    st.text_input("GTIN manual (opcional — se manda tal cual, aunque no sea puramente numérico):", key="ps_ml_gtin_manual")
                 elif ean:
                     st.caption(f"ℹ️ El EAN de Flexxus (**{ean}**) no tiene formato de código de barras válido (8/12/13/14 dígitos) — se publicará sin GTIN.")
                 else:
@@ -813,8 +813,6 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     _manual_gtin = (st.session_state.get("ps_ml_gtin_manual") or "").strip()
                     # El manual se manda tal cual lo escribió/dejó el usuario, letras incluidas —
                     # que ML decida si lo acepta, en vez de bloquearlo nosotros de antemano.
-                    _gtin_ready = _es_gtin_valido(ean) or bool(_manual_gtin)
-                    _gtin_blocking = st.session_state.get("ps_ml_gtin_required", False) and not _gtin_ready
 
                     st.write("**Confirmá antes de publicar:**")
                     col_conf1, col_conf2, col_conf3 = st.columns(3)
@@ -841,10 +839,10 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     else:
                         family_name = catalog_family_name
 
-                    if _gtin_blocking:
-                        st.error("⚠️ Esta categoría exige GTIN — completá el campo manual en el Paso 4 antes de publicar.")
+                    if st.session_state.get("ps_ml_gtin_required", False) and not (_es_gtin_valido(ean) or _manual_gtin):
+                        st.info("ℹ️ No hay GTIN disponible — se publicará indicando \"El producto no tiene código registrado\" (EMPTY_GTIN_REASON), que ML acepta como alternativa válida.")
 
-                    if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub", disabled=_gtin_blocking):
+                    if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
                         with st.status("Publicando en Mercado Libre...", expanded=True) as s:
                             try:
                                 st.write("• Preparando atributos...")
