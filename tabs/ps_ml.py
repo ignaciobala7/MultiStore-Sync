@@ -546,12 +546,18 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     st.caption(f"ℹ️ GTIN se toma automáticamente del EAN de Flexxus: **{ean}**")
                 elif gtin_required:
                     ean_raw = st.session_state.get("ps_ml_ean_raw") or ""
-                    if ean_raw:
-                        st.warning(f"⚠️ El EAN de Flexxus (**{ean_raw}**) no tiene formato de código de barras válido. Se precargó tal cual está en Flexxus (con letras si las tiene) — probá publicar así, corregilo, o dejalo vacío para publicar sin GTIN:")
+                    # Solo pre-cargar el manual si el valor crudo de Flexxus pasa el chequeo de
+                    # formato (8/12/13/14 dígitos) — precargar algo como "LCRIMP003" (fragmento
+                    # de código de producto, no un código de barras) confunde más que ayuda.
+                    prefill = ean_raw if _es_gtin_valido(ean_raw) else ""
+                    if ean_raw and not prefill:
+                        st.warning(f"⚠️ El EAN de Flexxus (**{ean_raw}**) no tiene formato de código de barras válido — no se precargó. Completá el GTIN manualmente si lo tenés, o dejalo vacío para publicar sin GTIN:")
+                    elif ean_raw:
+                        st.warning(f"⚠️ El EAN de Flexxus (**{ean_raw}**) se precargó — probá publicar así, corregilo, o dejalo vacío para publicar sin GTIN:")
                     else:
                         st.warning("⚠️ Esta categoría suele exigir GTIN y no hay EAN cargado en Flexxus — completalo si lo tenés, o dejalo vacío para publicar sin GTIN:")
                     if "ps_ml_gtin_manual" not in st.session_state:
-                        st.session_state["ps_ml_gtin_manual"] = ean_raw
+                        st.session_state["ps_ml_gtin_manual"] = prefill
                     st.text_input("GTIN manual (opcional — se manda tal cual, aunque no sea puramente numérico):", key="ps_ml_gtin_manual")
                 elif ean:
                     st.caption(f"ℹ️ El EAN de Flexxus (**{ean}**) no tiene formato de código de barras válido (8/12/13/14 dígitos) — se publicará sin GTIN.")
