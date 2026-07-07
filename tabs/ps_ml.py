@@ -365,14 +365,17 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
                 if catalogo is not None:
                     if not catalogo:
-                        st.info("No se encontró el producto en el catálogo. Se publicará con título manual.")
+                        if st.button("Continuar sin catálogo →", key="ps_ml_continuar_sin_catalogo"):
+                            st.session_state["ps_ml_skip_catalog"] = True
+                            st.rerun()
                     else:
                         st.caption(f"{len(catalogo)} resultado/s encontrado/s en el catálogo.")
                         sel_id = st.session_state.get("ps_ml_catalogo_sel_id", "")
 
-                        if sel_id and st.button("— Ninguno (usar título manual) —", key="ps_ml_catalogo_sel_none"):
+                        if st.button("— Publicar con título manual —", key="ps_ml_catalogo_sel_none"):
                             st.session_state["ps_ml_catalogo_sel_id"] = ""
                             st.session_state["ps_ml_catalogo_sel_name"] = ""
+                            st.session_state["ps_ml_skip_catalog"] = True
                             st.rerun()
 
                         for r in catalogo:
@@ -846,6 +849,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     s.update(label="✅ Publicado en Mercado Libre!", state="complete")
                                     st.success(
                                         f"**ML ID:** {item_id}\n\n"
+                                        f"**SKU:** {p.get('reference', '')}\n\n"
                                         f"**Precio:** ${precio_final:,.2f}\n\n"
                                         f"**Stock:** {p['stock']}\n\n"
                                         f"**Categoría:** {selected_cat['category_name']}"
