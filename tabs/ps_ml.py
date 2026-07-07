@@ -77,6 +77,16 @@ _PKG_FIELD_LABELS = {
 }
 
 
+def _es_gtin_valido(valor) -> bool:
+    """
+    ML rechaza GTIN/EAN con formato inválido aunque sea numérico (ej. "4618", 4 dígitos,
+    que en realidad es un fragmento del nombre del producto, no un código de barras real).
+    Los códigos de barras estándar tienen 8 (EAN-8), 12 (UPC-A), 13 (EAN-13) o 14 (GTIN-14) dígitos.
+    """
+    s = str(valor or "").strip()
+    return s.isdigit() and len(s) in (8, 12, 13, 14)
+
+
 def _mensaje_error_publicacion(err_msg: str) -> str:
     """
     Traduce el error de ML a algo accionable. Para "packaging attributes [...] are
@@ -99,6 +109,7 @@ def _mensaje_error_publicacion(err_msg: str) -> str:
 
 def render():
     """Punto de entrada de la pestaña. Llamado desde app.py."""
+    st.markdown('<div id="ps_ml_top"></div>', unsafe_allow_html=True)
     st.header("Infoandina (PrestaShop) → Mercado Libre")
     st.info(
         "Publica productos desde Infoandina directamente a Mercado Libre. "
@@ -168,7 +179,8 @@ def render():
                 st.session_state.pop("ps_ml_gemini_attrs", None)
                 st.session_state.pop("ps_ml_attrs_confirmed", None)
                 for k in ("ps_ml_catalogo", "ps_ml_catalogo_sel_id", "ps_ml_catalogo_sel_name",
-                          "ps_ml_gtin_result", "ps_ml_gtin_checked", "ps_ml_use_gtin_match"):
+                          "ps_ml_gtin_result", "ps_ml_gtin_checked", "ps_ml_use_gtin_match",
+                          "ps_ml_ean_input", "ps_ml_gtin_manual", "ps_ml_gtin_required"):
                     st.session_state.pop(k, None)
                 st.rerun()
 
@@ -200,8 +212,31 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Referencia (SKU)", p["reference"])
     col2.metric("Stock disponible", p["stock"])
-    ean = st.session_state.get("ps_ml_ean")
-    col3.metric("EAN", ean if ean else "Sin EAN")
+
+    def _on_ean_change():
+        # El EAN cambió — invalidar la búsqueda de catálogo por GTIN para que se repita con el nuevo valor
+        for k in ("ps_ml_gtin_result", "ps_ml_gtin_checked", "ps_ml_use_gtin_match"):
+            st.session_state.pop(k, None)
+
+    def _clear_ean():
+        st.session_state["ps_ml_ean_input"] = ""
+        _on_ean_change()
+
+    with col3:
+        st.caption("EAN (editable — Flexxus lo carga por defecto)")
+        ean_input = st.text_input(
+            "EAN",
+            value=st.session_state.get("ps_ml_ean") or "",
+            key="ps_ml_ean_input",
+            label_visibility="collapsed",
+            on_change=_on_ean_change,
+        )
+        st.button(
+            "✖ Publicar sin EAN", key="ps_ml_ean_clear",
+            on_click=_clear_ean, disabled=not ean_input,
+        )
+    ean = ean_input.strip()
+    st.session_state["ps_ml_ean"] = ean
     # col4 queda vacía a propósito, alineada arriba de "Precio Flexxus (ARS)"
 
     col_ps_usd, col_ps_ars, col_fx_usd, col_fx_ars = st.columns(4)
@@ -322,7 +357,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
             # Prioridad 1: búsqueda automática por EAN/GTIN — es lo más preciso
             # (ML lo ofrece como primera opción, "Por código", en su propio flujo de publicación).
-            if ean and str(ean).isdigit() and "ps_ml_gtin_checked" not in st.session_state:
+            if _es_gtin_valido(ean) and "ps_ml_gtin_checked" not in st.session_state:
                 with st.spinner(f"Buscando en catálogo por EAN {ean}..."):
                     st.session_state["ps_ml_gtin_result"] = publisher.buscar_en_catalogo_por_gtin(str(ean))
                 st.session_state["ps_ml_gtin_checked"] = True
@@ -344,10 +379,12 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 catalog_product_id = gtin_match["id"]
                 catalog_family_name = gtin_match["name"]
             else:
-                if ean and str(ean).isdigit() and not gtin_match:
+                if _es_gtin_valido(ean) and not gtin_match:
                     st.caption(f"No se encontró coincidencia en el catálogo por EAN {ean}.")
                 elif not ean:
                     st.caption("Sin EAN cargado para este SKU — no se puede buscar por código.")
+                elif not _es_gtin_valido(ean):
+                    st.caption(f"⚠️ El EAN cargado (**{ean}**) no tiene un formato de código de barras válido (8/12/13/14 dígitos) — no se usó para buscar en catálogo.")
 
                 # Nota: la API de catálogo de ML no acepta búsqueda por SKU propio —
                 # el catálogo es global entre vendedores, no conoce tu SKU interno.
@@ -498,8 +535,22 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     for a in ml_attrs
                 )
                 st.write(f"**{len(required_attrs)} atributo/s a completar:**")
-                if ean and str(ean).isdigit():
+                gtin_attr = next((a for a in ml_attrs if a.get("id") == "GTIN"), None)
+                gtin_required = bool(gtin_attr and (
+                    gtin_attr.get("tags", {}).get("required")
+                    or gtin_attr.get("tags", {}).get("conditional_required")
+                ))
+                st.session_state["ps_ml_gtin_required"] = gtin_required
+                if _es_gtin_valido(ean):
                     st.caption(f"ℹ️ GTIN se toma automáticamente del EAN de Flexxus: **{ean}**")
+                elif gtin_required:
+                    if ean:
+                        st.warning(f"⚠️ El EAN de Flexxus (**{ean}**) no tiene formato de código de barras válido y esta categoría exige GTIN — ingresalo manualmente:")
+                    else:
+                        st.warning("⚠️ Esta categoría exige GTIN y no hay EAN cargado — ingresalo manualmente:")
+                    st.text_input("GTIN manual:", key="ps_ml_gtin_manual")
+                elif ean:
+                    st.caption(f"ℹ️ El EAN de Flexxus (**{ean}**) no tiene formato de código de barras válido (8/12/13/14 dígitos) — se publicará sin GTIN.")
                 else:
                     st.caption("ℹ️ GTIN: sin EAN numérico disponible en Flexxus, se publicará sin GTIN.")
 
@@ -755,6 +806,26 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         st.info(f"Publicando de todas formas (MLA existente: {existing_record['mla_id']})")
 
                 if _show_publish_btn:
+                    _manual_gtin = (st.session_state.get("ps_ml_gtin_manual") or "").strip()
+                    _gtin_ready = _es_gtin_valido(ean) or _es_gtin_valido(_manual_gtin)
+                    _gtin_blocking = st.session_state.get("ps_ml_gtin_required", False) and not _gtin_ready
+
+                    st.write("**Confirmá antes de publicar:**")
+                    col_conf1, col_conf2, col_conf3 = st.columns(3)
+                    col_conf1.metric("SKU", sku_ref or "—")
+                    col_conf2.metric("Precio", f"${precio_final:,.0f} ARS")
+                    if _es_gtin_valido(ean):
+                        col_conf3.metric("EAN", ean)
+                    elif _es_gtin_valido(_manual_gtin):
+                        col_conf3.metric("GTIN manual", _manual_gtin)
+                    else:
+                        col_conf3.metric("EAN", "Sin EAN")
+                    st.markdown(
+                        '<a href="#ps_ml_top">✏️ ¿Algo mal? Corregir SKU, precio o EAN — volver al Paso 1</a>',
+                        unsafe_allow_html=True,
+                    )
+                    st.write("")
+
                     if not catalog_product_id:
                         family_name = st.text_input(
                             "Nombre de familia (requerido por ML si no usás catálogo):",
@@ -764,7 +835,10 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     else:
                         family_name = catalog_family_name
 
-                    if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub"):
+                    if _gtin_blocking:
+                        st.error("⚠️ Esta categoría exige GTIN — completá el campo manual en el Paso 4 antes de publicar.")
+
+                    if st.button("🚀 Crear publicación en ML", type="primary", key="ps_ml_pub", disabled=_gtin_blocking):
                         with st.status("Publicando en Mercado Libre...", expanded=True) as s:
                             try:
                                 st.write("• Preparando atributos...")
@@ -806,7 +880,12 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
                                 st.write("• Creando publicación...")
                                 _ean = st.session_state.get("ps_ml_ean")
-                                gtin_val = str(_ean) if _ean and str(_ean).isdigit() else ""
+                                if _es_gtin_valido(_ean):
+                                    gtin_val = str(_ean)
+                                elif _es_gtin_valido(_manual_gtin):
+                                    gtin_val = _manual_gtin
+                                else:
+                                    gtin_val = ""
                                 item = publisher.crear_item(
                                     title=p['name'],
                                     category_id=cat_id,
@@ -863,6 +942,10 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                         f"**Categoría:** {selected_cat['category_name']}"
                                     )
                                     st.write(f"[Ver publicación en ML]({permalink})")
+                                    st.markdown(
+                                        '<a href="#ps_ml_top">⬆️ Volver al inicio — publicar otro producto</a>',
+                                        unsafe_allow_html=True,
+                                    )
                                     if tracker and sku_ref:
                                         tracker.save(
                                             sku=sku_ref,
