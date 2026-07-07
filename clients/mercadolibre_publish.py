@@ -271,7 +271,6 @@ class MercadoLibrePublisher:
         category_id: str,
         price: float,
         stock: int,
-        description: str = "",
         images: list[str] | None = None,
         attributes: list[dict] | None = None,
         condition: str = "new",
@@ -311,9 +310,6 @@ class MercadoLibrePublisher:
             payload["title"] = title
             if family_name:
                 payload["family_name"] = family_name
-
-        if description:
-            payload["description"] = {"plain_text": description}
 
         if images:
             payload["pictures"] = [{"source": url} for url in images if url]
@@ -375,6 +371,10 @@ class MercadoLibrePublisher:
             else:
                 raise
         return result
+
+    def agregar_descripcion(self, item_id: str, plain_text: str) -> dict | None:
+        """Carga la descripción de una publicación via POST /items/{id}/description."""
+        return self._post(f"/items/{item_id}/description", {"plain_text": plain_text})
 
     def subir_imagen(self, item_id: str, image_url: str) -> dict | None:
         """

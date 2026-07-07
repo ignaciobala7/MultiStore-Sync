@@ -253,6 +253,18 @@ cambio USD → ARS" (pensado justamente para eso), el ajuste se reflejaba en el
 PS de fallback) junto con el TC editable — consistente con lo que se muestra
 en pantalla.
 
+### Fixes sesión 2026-07-07
+
+**Descripción de PrestaShop no se cargaba en la publicación de ML**
+`crear_item()` mandaba `payload["description"] = {"plain_text": ...}` dentro
+del POST de creación de `/items` — ML ignora ese campo ahí; la descripción
+solo se puede cargar con un POST separado a `/items/{id}/description`. Se
+quitó el parámetro `description` de `crear_item()` (dead code, nunca hizo
+nada) y se agregó `agregar_descripcion(item_id, plain_text)` en
+`mercadolibre_publish.py`. `ps_ml.py` la llama después de crear el ítem,
+junto al patch de garantía/envío, con warning visible si falla (no bloquea
+la publicación ya creada).
+
 ## Branches
 
 - `main` — stable/production

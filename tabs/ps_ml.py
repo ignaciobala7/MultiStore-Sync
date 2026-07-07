@@ -812,7 +812,6 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                     category_id=cat_id,
                                     price=precio_final,
                                     stock=stock_ml,
-                                    description=p.get('description', ''),
                                     images=imgs_publicas,
                                     attributes=attrs_ml,
                                     condition="new",
@@ -846,6 +845,15 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                         st.write("• Garantía, factura y retiro confirmados.")
                                     except Exception as e_patch:
                                         st.warning(f"⚠️ Publicado pero no se pudo confirmar garantía/factura/retiro: {e_patch}")
+
+                                    descripcion_ps = p.get('description', '')
+                                    if descripcion_ps:
+                                        try:
+                                            publisher.agregar_descripcion(item_id, descripcion_ps)
+                                            st.write("• Descripción cargada.")
+                                        except Exception as e_desc:
+                                            st.warning(f"⚠️ Publicado pero no se pudo cargar la descripción: {e_desc}")
+
                                     s.update(label="✅ Publicado en Mercado Libre!", state="complete")
                                     st.success(
                                         f"**ML ID:** {item_id}\n\n"

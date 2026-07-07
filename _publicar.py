@@ -131,7 +131,6 @@ item = publisher.crear_item(
     category_id=CATEGORY_ID,
     price=precio_final,
     stock=stock_ml,
-    description=p.get("description", ""),
     images=imgs_publicas,
     attributes=attrs_ml,
     condition="new",
@@ -142,6 +141,13 @@ item = publisher.crear_item(
 )
 
 if item:
+    if description:
+        try:
+            publisher.agregar_descripcion(item["id"], description)
+            print("  ✓ Descripción cargada")
+        except Exception as e:
+            print(f"  ⚠️ No se pudo cargar la descripción: {e}")
+
     print("\n✅ PUBLICACIÓN EXITOSA")
     print(f"  ML ID      : {item.get('id')}")
     print(f"  Estado     : {item.get('status')}")

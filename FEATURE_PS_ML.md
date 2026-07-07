@@ -47,7 +47,6 @@ item = publisher.crear_item(
     category_id="MLA1051",
     price=50000,
     stock=5,
-    description="Descripción...",
     images=["https://...", "https://..."],
     attributes=[
         {"id": "BRAND", "value_name": "Samsung"},
@@ -55,6 +54,9 @@ item = publisher.crear_item(
     ]
 )
 # → {"id": "MLA123456789", "permalink": "https://..."}
+
+# La descripción va aparte: ML la ignora si se manda en /items
+publisher.agregar_descripcion(item["id"], "Descripción...")
 ```
 
 ---
