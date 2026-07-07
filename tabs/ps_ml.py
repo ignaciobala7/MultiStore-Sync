@@ -168,6 +168,7 @@ def render():
                 flexxus_price = flexxus.get_precio(sku_ps_ml) if flexxus else None
                 st.session_state["ps_ml_flexxus_price"] = flexxus_price
                 st.session_state["ps_ml_ean"] = flexxus.get_ean(sku_ps_ml) if flexxus else None
+                st.session_state["ps_ml_ean_raw"] = flexxus.get_ean_raw(sku_ps_ml) if flexxus else None
                 st.session_state["ps_ml_vat"] = flexxus.get_value_added_tax(sku_ps_ml) if flexxus else None
                 # Resetear tipo de cambio para que se inicialice desde Flexxus
                 st.session_state.pop("ps_ml_tc", None)
@@ -544,11 +545,14 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 if _es_gtin_valido(ean):
                     st.caption(f"ℹ️ GTIN se toma automáticamente del EAN de Flexxus: **{ean}**")
                 elif gtin_required:
-                    if ean:
-                        st.warning(f"⚠️ El EAN de Flexxus (**{ean}**) no tiene formato de código de barras válido y esta categoría exige GTIN — ingresalo manualmente:")
+                    ean_raw = st.session_state.get("ps_ml_ean_raw") or ""
+                    if ean_raw:
+                        st.warning(f"⚠️ El EAN de Flexxus (**{ean_raw}**) no tiene formato de código de barras válido y esta categoría exige GTIN. Se precargó tal cual está en Flexxus (con letras si las tiene) — probá publicar así o corregilo:")
                     else:
-                        st.warning("⚠️ Esta categoría exige GTIN y no hay EAN cargado — ingresalo manualmente:")
-                    st.text_input("GTIN manual:", key="ps_ml_gtin_manual")
+                        st.warning("⚠️ Esta categoría exige GTIN y no hay EAN cargado en Flexxus — ingresalo manualmente:")
+                    if "ps_ml_gtin_manual" not in st.session_state:
+                        st.session_state["ps_ml_gtin_manual"] = ean_raw
+                    st.text_input("GTIN manual (se manda tal cual, aunque no sea puramente numérico):", key="ps_ml_gtin_manual")
                 elif ean:
                     st.caption(f"ℹ️ El EAN de Flexxus (**{ean}**) no tiene formato de código de barras válido (8/12/13/14 dígitos) — se publicará sin GTIN.")
                 else:
@@ -807,7 +811,9 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
                 if _show_publish_btn:
                     _manual_gtin = (st.session_state.get("ps_ml_gtin_manual") or "").strip()
-                    _gtin_ready = _es_gtin_valido(ean) or _es_gtin_valido(_manual_gtin)
+                    # El manual se manda tal cual lo escribió/dejó el usuario, letras incluidas —
+                    # que ML decida si lo acepta, en vez de bloquearlo nosotros de antemano.
+                    _gtin_ready = _es_gtin_valido(ean) or bool(_manual_gtin)
                     _gtin_blocking = st.session_state.get("ps_ml_gtin_required", False) and not _gtin_ready
 
                     st.write("**Confirmá antes de publicar:**")
@@ -816,7 +822,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     col_conf2.metric("Precio", f"${precio_final:,.0f} ARS")
                     if _es_gtin_valido(ean):
                         col_conf3.metric("EAN", ean)
-                    elif _es_gtin_valido(_manual_gtin):
+                    elif _manual_gtin:
                         col_conf3.metric("GTIN manual", _manual_gtin)
                     else:
                         col_conf3.metric("EAN", "Sin EAN")
@@ -882,7 +888,9 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                 _ean = st.session_state.get("ps_ml_ean")
                                 if _es_gtin_valido(_ean):
                                     gtin_val = str(_ean)
-                                elif _es_gtin_valido(_manual_gtin):
+                                elif _manual_gtin:
+                                    # Se manda tal cual lo dejó el usuario (puede tener letras) —
+                                    # es ML quien valida el formato real al recibirlo.
                                     gtin_val = _manual_gtin
                                 else:
                                     gtin_val = ""

@@ -151,6 +151,26 @@ class FlexxusClient:
             return match.group(1)
         return val_str
 
+    def get_ean_raw(self, sku: str) -> str | None:
+        """
+        Devuelve CODIGOBARRA tal cual está en el Excel, sin quitar el prefijo de letra
+        que get_ean() sí descarta. Sirve como último recurso manual cuando el valor
+        limpio no es un GTIN válido para ML — se manda el dato crudo tal cual está
+        cargado en Flexxus, letras incluidas, y que ML decida si lo acepta.
+        """
+        if self._articulos is None:
+            return None
+        fila = self._articulos[self._articulos["CODIGOPARTICULAR"] == sku.strip().upper()]
+        if fila.empty:
+            return None
+        val = fila.iloc[0]["CODIGOBARRA"]
+        if pd.isna(val) or str(val).strip() in ("", "nan"):
+            return None
+        val_str = str(val).strip()
+        if val_str.replace(".", "").isdigit():
+            return str(int(float(val_str)))
+        return val_str
+
     def recargar(self):
         """
         Recarga el Excel desde disco. Útil si el operario actualizó

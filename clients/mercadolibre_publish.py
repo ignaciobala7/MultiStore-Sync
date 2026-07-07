@@ -316,6 +316,11 @@ class MercadoLibrePublisher:
 
         if gtin:
             attributes = list(attributes) + [{"id": "GTIN", "value_name": gtin}]
+        else:
+            # EMPTY_GTIN_REASON es de lista fija (value_type: "list") — ML rechaza texto libre
+            # como "No registrado"; hay que mandar el value_id de la opción real de la categoría.
+            # id 17055160 = "El producto no tiene código registrado" (verificado contra la API).
+            attributes = list(attributes) + [{"id": "EMPTY_GTIN_REASON", "value_id": "17055160"}]
         if value_added_tax:
             attributes = list(attributes) + [{"id": "VALUE_ADDED_TAX", "value_name": value_added_tax}]
         if import_duty:
@@ -332,7 +337,7 @@ class MercadoLibrePublisher:
                 # En modo catálogo solo mandamos atributos fiscales, GTIN, SKU y dimensiones de paquete
                 # (algunas categorías exigen SELLER_PACKAGE_* aunque el resto venga del catálogo)
                 allowed = {
-                    "GTIN", "VALUE_ADDED_TAX", "IMPORT_DUTY", "SELLER_SKU",
+                    "GTIN", "EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY", "SELLER_SKU",
                     "SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH",
                     "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT",
                 }
