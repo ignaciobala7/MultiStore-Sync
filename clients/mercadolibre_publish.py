@@ -477,7 +477,17 @@ def sugerir_terminos_busqueda(nombre_producto: str) -> list[str]:
     if "teclado" in keywords and "mouse" in keywords:
         sugerencias.add("teclado y mouse")
 
-    return sorted(list(sugerencias))[:5]
+    # auto_match_categoria() usa el PRIMER término que dé algún resultado en ML.
+    # El orden alfabético es arbitrario y deja pasar fragmentos cortos tipo "cat.6"
+    # o "rj11/45" (specs/códigos con dígitos) antes que palabras completas como
+    # "pinza" — ML puede interpretar "cat.6" como "cat" (gato) y matchear una
+    # categoría totalmente ajena. Priorizamos términos sin dígitos (palabras reales)
+    # y, dentro de cada grupo, los más largos/específicos primero.
+    def _prioridad(term: str) -> tuple:
+        tiene_digito = any(c.isdigit() for c in term)
+        return (tiene_digito, -len(term), term)
+
+    return sorted(sugerencias, key=_prioridad)[:5]
 
 
 def get_popular_categories_with_correct_ids(publisher) -> dict:
@@ -519,7 +529,16 @@ def auto_match_categoria(nombre_producto: str, publisher) -> dict | None:
     """
     sugerencias = sugerir_terminos_busqueda(nombre_producto)
 
-    for termino in sugerencias:
+    # Una sola palabra suelta (ej. "pinza") suele ser demasiado genérica — ML
+    # devuelve la categoría más popular para esa palabra, no necesariamente la
+    # correcta para este producto puntual. Antes de probar términos sueltos,
+    # probamos el término más específico combinado con cada uno de los demás
+    # (ej. "pinza glc", "pinza crimp-003") para acotar más la búsqueda.
+    compuestos = []
+    if len(sugerencias) > 1:
+        compuestos = [f"{sugerencias[0]} {t}" for t in sugerencias[1:]]
+
+    for termino in compuestos + sugerencias:
         resultados = publisher.buscar_categorias(termino, limit=3)
         if resultados:
             return resultados[0]
