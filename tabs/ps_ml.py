@@ -938,7 +938,9 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                                         st.warning(f"⚠️ Publicado pero no se pudo confirmar garantía/factura/retiro: {e_patch}")
 
                                     descripcion_ps = p.get('description', '')
-                                    if descripcion_ps:
+                                    if catalog_product_id:
+                                        st.info("ℹ️ Publicación en modo catálogo: la descripción la define el catálogo de ML, no se envía la descripción de PrestaShop.")
+                                    elif descripcion_ps:
                                         try:
                                             publisher.agregar_descripcion(item_id, descripcion_ps)
                                             st.write("• Descripción cargada.")
