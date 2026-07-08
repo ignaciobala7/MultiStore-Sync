@@ -551,6 +551,22 @@ def get_popular_categories_with_correct_ids(publisher) -> dict:
     return resultado
 
 
+# Raíces de categoría ajenas al rubro de esta tienda (electrónica/redes) que ML
+# igual sugiere por coincidencia de palabra (ej. "pigtail" también es un término
+# de electricidad automotriz). Se descartan aunque sean el resultado más popular.
+RAICES_EXCLUIDAS = {"MLA5725"}  # Accesorios para Vehículos
+
+
+def _raiz_excluida(publisher, category_id: str, cache: dict) -> bool:
+    if category_id not in cache:
+        try:
+            path = publisher._get(f"/categories/{category_id}").get("path_from_root", [])
+            cache[category_id] = path[0]["id"] if path else None
+        except Exception:
+            cache[category_id] = None
+    return cache[category_id] in RAICES_EXCLUIDAS
+
+
 def auto_match_categoria(nombre_producto: str, publisher) -> dict | None:
     """
     Intenta hacer match automático de categoría buscando términos clave.
@@ -568,10 +584,12 @@ def auto_match_categoria(nombre_producto: str, publisher) -> dict | None:
     if len(sugerencias) > 1:
         compuestos = [f"{sugerencias[0]} {t}" for t in sugerencias[1:]]
 
+    raices_cache = {}
     for termino in compuestos + sugerencias:
-        resultados = publisher.buscar_categorias(termino, limit=3)
-        if resultados:
-            return resultados[0]
+        resultados = publisher.buscar_categorias(termino, limit=5)
+        for r in resultados:
+            if not _raiz_excluida(publisher, r["category_id"], raices_cache):
+                return r
 
     return None
 

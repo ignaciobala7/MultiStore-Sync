@@ -683,11 +683,25 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
 
                 btn_label = "⚠️ Revisar info y confirmar" if source == "gemini" else "✓ Confirmar atributos"
                 if st.button(btn_label, type="primary", key="ps_ml_confirm_attrs"):
-                    st.session_state["ps_ml_attrs_values"] = {
+                    valores = {
                         attr.get("id", ""): st.session_state.get(f"attr_{cat_id}_{attr.get('id', '')}", "")
                         for attr in required_attrs
                     }
-                    st.session_state["ps_ml_attrs_confirmed"] = True
+                    faltantes = [
+                        attr.get("name", attr.get("id", ""))
+                        for attr in required_attrs
+                        if attr.get("tags", {}).get("required")
+                        and not valores.get(attr.get("id", ""), "").strip()
+                    ]
+                    if faltantes:
+                        st.error(
+                            f"⚠️ Faltan atributos obligatorios: {', '.join(faltantes)}. "
+                            "ML rechaza la publicación sin estos valores."
+                        )
+                        st.session_state["ps_ml_attrs_confirmed"] = False
+                    else:
+                        st.session_state["ps_ml_attrs_values"] = valores
+                        st.session_state["ps_ml_attrs_confirmed"] = True
 
                 if not st.session_state.get("ps_ml_attrs_confirmed"):
                     st.info("Completá los atributos y confirmá para continuar.")
