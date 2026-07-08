@@ -104,6 +104,14 @@ def _mensaje_error_publicacion(err_msg: str) -> str:
             "exacto para sugerir acá — subí ese valor en el Paso 4 (probá de a poco: +1-2 cm o "
             "+50 g) y reintentá publicar."
         )
+    if re.search(r"attributes? \[GTIN\] (?:is|are) required", err_msg, re.IGNORECASE):
+        return (
+            "⚠️ Esta categoría exige un GTIN/EAN real — no acepta \"El producto no tiene código "
+            "registrado\" como alternativa, aunque la lista de atributos de la categoría lo permita. "
+            "No hay forma de publicar acá sin un código de barras real. Opciones: buscá el producto "
+            "en el catálogo de ML por nombre en el Paso 3 (el catálogo trae su propio GTIN), o "
+            "conseguí el EAN real y cargalo manualmente en el Paso 1."
+        )
     return f"Error: {err_msg}"
 
 
