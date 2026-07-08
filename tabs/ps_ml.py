@@ -451,8 +451,10 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                             catalog_product_id, product_name=catalog_family_name
                         )
                         catalog_product_data = publisher.get_catalog_product(catalog_product_id)
+                        precio_ref_catalogo = publisher.obtener_precio_referencia_catalogo(catalog_product_id)
                     st.session_state["ps_ml_last_catalog_product_id"] = catalog_product_id
                     st.session_state["ps_ml_catalog_category_id"] = cat_from_catalog
+                    st.session_state["ps_ml_catalog_precio_ref"] = precio_ref_catalogo
                     if catalog_product_data:
                         catalog_attrs_raw = catalog_product_data.get("attributes", [])
                         st.session_state["ps_ml_catalog_attrs"] = {
@@ -490,6 +492,39 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         "⚠️ No se pudo verificar la categoría del catálogo. "
                         "Se usará la categoría seleccionada manualmente."
                     )
+
+                # ── Precio de referencia del catálogo vs. costo Flexxus ────────
+                precio_ref_catalogo = st.session_state.get("ps_ml_catalog_precio_ref")
+                if precio_ref_catalogo:
+                    col_ref1, col_ref2, col_ref3 = st.columns(3)
+                    col_ref1.metric(
+                        "Precio de referencia (buy box)",
+                        f"${precio_ref_catalogo['precio_buybox']:,.0f}",
+                    )
+                    col_ref2.metric(
+                        "Rango de precios activos",
+                        f"${precio_ref_catalogo['precio_min']:,.0f} – ${precio_ref_catalogo['precio_max']:,.0f}",
+                    )
+                    col_ref3.metric(
+                        "Publicaciones activas",
+                        precio_ref_catalogo["cantidad"],
+                    )
+                    if flexxus_price and flexxus_price["pesos"] > 0:
+                        costo_flexxus = flexxus_price["pesos"]
+                        if costo_flexxus >= precio_ref_catalogo["precio_buybox"]:
+                            st.error(
+                                f"⚠️ El costo Flexxus (${costo_flexxus:,.0f}) es igual o mayor al precio "
+                                f"de referencia del catálogo (${precio_ref_catalogo['precio_buybox']:,.0f}) — "
+                                "sin margen para competir en este catálogo."
+                            )
+                        else:
+                            margen_pct = (precio_ref_catalogo["precio_buybox"] - costo_flexxus) / costo_flexxus * 100
+                            st.caption(f"Margen bruto frente al precio de referencia: ~{margen_pct:,.0f}%")
+                else:
+                    st.caption(
+                        "ℹ️ No se encontraron publicaciones activas para este producto de catálogo "
+                        "— no hay precio de referencia disponible para comparar."
+                    )
             else:
                 # Solo limpiar attrs si veníamos de modo catálogo (transición, no cada re-render)
                 was_using_catalog = "ps_ml_last_catalog_product_id" in st.session_state
@@ -497,6 +532,7 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 st.session_state.pop("ps_ml_catalog_category_id", None)
                 st.session_state.pop("ps_ml_catalog_attrs", None)
                 st.session_state.pop("ps_ml_catalog_pkg_dims", None)
+                st.session_state.pop("ps_ml_catalog_precio_ref", None)
                 if was_using_catalog:
                     st.session_state.pop("ps_ml_gemini_attrs", None)
                     st.session_state.pop("ps_ml_attrs_confirmed", None)

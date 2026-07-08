@@ -265,6 +265,38 @@ class MercadoLibrePublisher:
         except Exception:
             return None
 
+    def obtener_precio_referencia_catalogo(self, catalog_product_id: str) -> dict | None:
+        """
+        Precio de referencia/competencia para un catalog_product_id, a partir de las
+        publicaciones activas que compiten por ese producto de catálogo.
+
+        Usa /sites/MLA/search?catalog_product_id=... (mismo endpoint que
+        obtener_categoria_de_catalogo). ML no expone un endpoint dedicado de
+        "precio de competencia"; este listado es lo más cercano — el primer
+        resultado suele ser quien gana el buy box al momento de la consulta.
+
+        Retorna {cantidad, precio_buybox, precio_min, precio_max, precio_promedio}
+        o None si no hay publicaciones activas o falla la consulta.
+        """
+        try:
+            data = self._get(
+                f"/sites/{SITE_ID}/search",
+                params={"catalog_product_id": catalog_product_id, "limit": 50},
+            )
+            results = data.get("results", [])
+            precios = [r["price"] for r in results if r.get("price") is not None]
+            if not precios:
+                return None
+            return {
+                "cantidad": len(precios),
+                "precio_buybox": precios[0],
+                "precio_min": min(precios),
+                "precio_max": max(precios),
+                "precio_promedio": sum(precios) / len(precios),
+            }
+        except Exception:
+            return None
+
     def crear_item(
         self,
         title: str,
