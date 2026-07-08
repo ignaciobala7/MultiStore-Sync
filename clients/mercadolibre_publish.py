@@ -270,19 +270,17 @@ class MercadoLibrePublisher:
         Precio de referencia/competencia para un catalog_product_id, a partir de las
         publicaciones activas que compiten por ese producto de catálogo.
 
-        Usa /sites/MLA/search?catalog_product_id=... (mismo endpoint que
-        obtener_categoria_de_catalogo). ML no expone un endpoint dedicado de
-        "precio de competencia"; este listado es lo más cercano — el primer
-        resultado suele ser quien gana el buy box al momento de la consulta.
+        Usa /products/{id}/items — NO /sites/MLA/search?catalog_product_id=, que
+        devuelve 403 con el scope de esta app (mismo problema que ya tiene
+        obtener_categoria_de_catalogo con ese endpoint). /products/{id}/items no
+        requiere scope de búsqueda y devuelve las publicaciones reales que compiten,
+        ordenadas con quien gana el buy box primero.
 
         Retorna {cantidad, precio_buybox, precio_min, precio_max, precio_promedio}
         o None si no hay publicaciones activas o falla la consulta.
         """
         try:
-            data = self._get(
-                f"/sites/{SITE_ID}/search",
-                params={"catalog_product_id": catalog_product_id, "limit": 50},
-            )
+            data = self._get(f"/products/{catalog_product_id}/items", params={"limit": 100})
             results = data.get("results", [])
             precios = [r["price"] for r in results if r.get("price") is not None]
             if not precios:
