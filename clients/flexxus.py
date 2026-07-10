@@ -170,10 +170,14 @@ class FlexxusClient:
     def get_ean(self, sku: str) -> str | None:
         """
         Devuelve el código de barras (EAN/GTIN) del artículo, o None si está vacío.
-        El valor puede venir como float del Excel (ej: 192545215831.0) — se convierte a
-        string limpio. Algunos códigos vienen con una letra de prefijo antes del EAN
-        numérico real (ej: "L6939554923562") — se descarta esa letra y se devuelve
-        solo la parte numérica, ya que ML/GTIN requiere solo dígitos.
+        El valor puede venir como float del Excel (ej: "192545215831.0") — se recorta
+        el ".0" como STRING (no con int(float(...))), para no perder ceros a la
+        izquierda (ej: "097855171979" → "97855171979" es un bug, no una limpieza:
+        int(float("097855171979")) = 97855171979, sin el 0 inicial — un GTIN real
+        de 12 dígitos pasaría a verse como uno de 11, inválido). Algunos códigos
+        vienen con una letra de prefijo antes del EAN numérico real (ej:
+        "L6939554923562") — se descarta esa letra y se devuelve solo la parte
+        numérica, ya que ML/GTIN requiere solo dígitos.
         """
         if self._articulos is None:
             return None
@@ -184,8 +188,10 @@ class FlexxusClient:
         if pd.isna(val) or str(val).strip() in ("", "nan"):
             return None
         val_str = str(val).strip()
-        if val_str.replace(".", "").isdigit():
-            return str(int(float(val_str)))
+        if val_str.endswith(".0") and val_str[:-2].isdigit():
+            val_str = val_str[:-2]
+        if val_str.isdigit():
+            return val_str
         match = re.match(r"^[A-Za-z]+(\d+)$", val_str)
         if match:
             return match.group(1)
@@ -207,8 +213,10 @@ class FlexxusClient:
         if pd.isna(val) or str(val).strip() in ("", "nan"):
             return None
         val_str = str(val).strip()
-        if val_str.replace(".", "").isdigit():
-            return str(int(float(val_str)))
+        # Mismo cuidado que en get_ean(): recortar el ".0" como string, no con
+        # int(float(...)) — ese round-trip numérico pierde ceros a la izquierda.
+        if val_str.endswith(".0") and val_str[:-2].isdigit():
+            val_str = val_str[:-2]
         return val_str
 
     def recargar(self):
