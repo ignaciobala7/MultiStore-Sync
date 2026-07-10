@@ -348,6 +348,30 @@ reemplaza el cálculo contra el catálogo, solo lo complementa.
 desde la API de Flexxus V5 en vez de replicar esta lectura de planilla.
 Archivos: `clients/flexxus.py`, `tabs/ps_ml.py`. Commit: 34b81d3
 
+**Auto-match matcheaba categoría ajena por palabras de marketing largas**
+`sugerir_terminos_busqueda()._prioridad()` rankeaba por longitud de palabra
+dentro del grupo sin dígitos, dejando pasar términos largos pero sin sentido
+como categoría (ej. "dyadream-mint", parte del nombre comercial de un
+teclado) por encima de palabras reales de producto ("teclado"/"keyboard").
+Caso real: "Teclado Logitech Pop Dyadream-mint Freshs Vibes Mechanical"
+terminaba matcheando "Ecualizadores" en vez de "Teclados Físicos". Nueva
+constante `TERMINOS_PRODUCTO_CONOCIDO` (valores de `KEYWORDS_MAPPING`) —
+`_prioridad()` ahora ordena: sin dígitos primero, palabras de producto
+conocido antes que términos sin clasificar (marca, marketing, adjetivos), y
+recién después por longitud. Archivo: `clients/mercadolibre_publish.py`.
+Commit: bc5a20d
+
+**get_ean() perdía el cero inicial del código de barras**
+`str(int(float(val_str)))` — pensado para recortar el ".0" de valores tipo
+"192545215831.0" — se aplicaba a CUALQUIER string de solo dígitos, incluso
+a los que ya venían limpios del Excel. Ese round-trip numérico borra ceros
+a la izquierda. Caso real: SKU `A46-004-1026`, EAN real "097855171979" (12
+dígitos) se devolvía como "97855171979" (11 dígitos, inválido para ML — se
+marcaba GTIN inválido cuando en realidad era válido). Ahora el ".0" se
+recorta con slicing de string (`val_str[:-2]` si `endswith(".0")`), sin pasar
+nunca por conversión numérica. Mismo fix en `get_ean()` y `get_ean_raw()`.
+Archivo: `clients/flexxus.py`. Commit: 0853943
+
 ## Branches
 
 - `main` — stable/production
