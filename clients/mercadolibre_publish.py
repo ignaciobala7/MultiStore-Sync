@@ -504,6 +504,17 @@ KEYWORDS_MAPPING = {
     "memoria": ["memoria", "usb"],
 }
 
+# Términos "de producto real" — los valores de KEYWORDS_MAPPING de arriba.
+# Se usan para priorizar, dentro de sugerir_terminos_busqueda(), palabras que
+# describen QUÉ ES el producto (teclado, keyboard, mouse...) por encima de
+# palabras sueltas del nombre que no describen un tipo de producto conocido
+# (marca, nombre de línea/color de marketing, adjetivos). Ver _prioridad()
+# más abajo — el bug real: "Teclado Logitech Pop Dyadream-mint Freshs Vibes
+# Mechanical" rankeaba "dyadream-mint" primero por ser la palabra más larga,
+# y ese término sin sentido terminaba matcheando categorías ajenas (ej.
+# "Ecualizadores") en vez de "teclado"/"keyboard".
+TERMINOS_PRODUCTO_CONOCIDO = {t for valores in KEYWORDS_MAPPING.values() for t in valores}
+
 
 def extraer_keywords_producto(nombre_producto: str) -> list[str]:
     """
@@ -547,11 +558,22 @@ def sugerir_terminos_busqueda(nombre_producto: str) -> list[str]:
     # El orden alfabético es arbitrario y deja pasar fragmentos cortos tipo "cat.6"
     # o "rj11/45" (specs/códigos con dígitos) antes que palabras completas como
     # "pinza" — ML puede interpretar "cat.6" como "cat" (gato) y matchear una
-    # categoría totalmente ajena. Priorizamos términos sin dígitos (palabras reales)
-    # y, dentro de cada grupo, los más largos/específicos primero.
+    # categoría totalmente ajena.
+    #
+    # Prioridad, en este orden:
+    #   1. Sin dígitos (palabras reales) antes que specs/códigos con números.
+    #   2. Palabras de PRODUCTO real (TERMINOS_PRODUCTO_CONOCIDO: "teclado",
+    #      "keyboard", "mouse"...) antes que palabras sueltas sin clasificar
+    #      (marca, nombres de línea de marketing, adjetivos descriptivos).
+    #      Sin esto, un término inventado/largo tipo "dyadream-mint" (parte
+    #      del nombre comercial del producto, no una palabra real) le ganaba
+    #      a "teclado"/"keyboard" solo por ser más largo, y terminaba
+    #      matcheando una categoría totalmente ajena (ver KEYWORDS_MAPPING).
+    #   3. Dentro de cada grupo, los más largos/específicos primero.
     def _prioridad(term: str) -> tuple:
         tiene_digito = any(c.isdigit() for c in term)
-        return (tiene_digito, -len(term), term)
+        es_desconocido = term not in TERMINOS_PRODUCTO_CONOCIDO
+        return (tiene_digito, es_desconocido, -len(term), term)
 
     return sorted(sugerencias, key=_prioridad)[:5]
 
