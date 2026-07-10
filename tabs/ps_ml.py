@@ -37,6 +37,10 @@ from optimize_images import procesar_y_hostear
 ATTRS_BLACKLIST = {"EMPTY_GTIN_REASON", "VALUE_ADDED_TAX", "IMPORT_DUTY", "GTIN"}
 PACKAGE_ATTR_IDS = {"SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH", "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WEIGHT"}
 
+# Margen bruto mínimo aceptable sobre el costo de reposición (con IVA incluido)
+# para publicar un producto — regla de negocio, no restricción de ML.
+MARGEN_MINIMO_PCT = 34
+
 # Mapea los atributos de dimensiones "reales" del producto de catálogo (declaradas por el
 # fabricante, sin el prefijo SELLER_) a nuestras claves internas de sugerencia.
 _CATALOG_PKG_ATTR_MAP = {
@@ -85,6 +89,15 @@ def _es_gtin_valido(valor) -> bool:
     """
     s = str(valor or "").strip()
     return s.isdigit() and len(s) in (8, 12, 13, 14)
+
+
+def _margen_pct(costo_real: float, precio_venta: float) -> float:
+    """
+    Margen bruto %, calculado sobre el costo de reposición (costo_real, ya con
+    IVA incluido) — no sobre el precio de venta. Puede dar negativo si
+    precio_venta < costo_real (se vendería por debajo del costo).
+    """
+    return (precio_venta - costo_real) / costo_real * 100
 
 
 def _mensaje_error_publicacion(err_msg: str) -> str:
@@ -511,7 +524,11 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         "Se usará la categoría seleccionada manualmente."
                     )
 
-                # ── Precio de referencia del catálogo vs. costo Flexxus ────────
+                # ── Precio de referencia del catálogo vs. costo real ───────────
+                # OJO: flexxus_price["pesos"] es el precio de VENTA Lista 5 (ya
+                # incluye margen, ej. 48%) — NO es el costo. El costo real de
+                # reposición es flexxus_price["costo_pesos"] (PRECIOCOMPRA, sin
+                # margen). Usar "pesos" acá subestima el margen real disponible.
                 precio_ref_catalogo = st.session_state.get("ps_ml_catalog_precio_ref")
                 if precio_ref_catalogo:
                     col_ref1, col_ref2, col_ref3 = st.columns(3)
@@ -527,17 +544,46 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                         "Publicaciones activas",
                         precio_ref_catalogo["cantidad"],
                     )
-                    if flexxus_price and flexxus_price["pesos"] > 0:
-                        costo_flexxus = flexxus_price["pesos"]
-                        if costo_flexxus >= precio_ref_catalogo["precio_buybox"]:
-                            st.error(
-                                f"⚠️ El costo Flexxus (${costo_flexxus:,.0f}) es igual o mayor al precio "
-                                f"de referencia del catálogo (${precio_ref_catalogo['precio_buybox']:,.0f}) — "
-                                "sin margen para competir en este catálogo."
+                    costo_real = flexxus_price.get("costo_pesos") if flexxus_price else None
+                    # margen5_pct = margen que Flexxus ya tiene configurado para la Lista 5
+                    # (columna MARGEN5 del Excel) — dato de REFERENCIA, no el margen real
+                    # calculado contra el mercado. Ver nota de portabilidad en flexxus.py:
+                    # acá viene de un Excel exportado a mano (puede estar desactualizado);
+                    # en el dashboard JS conviene traerlo en vivo de la API de Flexxus V5.
+                    margen5_pct = flexxus_price.get("margen5_pct") if flexxus_price else None
+
+                    col_m1, col_m2 = st.columns(2)
+                    with col_m1:
+                        if costo_real and costo_real > 0:
+                            margen_pct = _margen_pct(costo_real, precio_ref_catalogo["precio_buybox"])
+                            if margen_pct < MARGEN_MINIMO_PCT:
+                                st.error(
+                                    f"⚠️ Margen vs. catálogo: ~{margen_pct:,.0f}% "
+                                    f"(costo real ${costo_real:,.0f} vs. "
+                                    f"${precio_ref_catalogo['precio_buybox']:,.0f}) — por debajo "
+                                    f"del mínimo aceptable de {MARGEN_MINIMO_PCT}%. Revisá el precio "
+                                    "antes de publicar en este catálogo."
+                                )
+                            else:
+                                st.caption(
+                                    f"✅ Margen vs. catálogo: ~{margen_pct:,.0f}% "
+                                    f"(mínimo aceptable: {MARGEN_MINIMO_PCT}%)."
+                                )
+                        elif flexxus_price:
+                            st.caption(
+                                "ℹ️ Flexxus no trae costo de reposición (PRECIOCOMPRA) para este "
+                                "SKU — no se puede calcular el margen real frente al catálogo."
+                            )
+                    with col_m2:
+                        if margen5_pct is not None:
+                            st.metric("Margen configurado en Flexxus (Lista 5)", f"{margen5_pct:,.0f}%")
+                            st.caption(
+                                "⚠️ Dato de referencia tal cual está en el Excel exportado — puede "
+                                "estar desactualizado. No es el margen real calculado contra el "
+                                "catálogo (columna de la izquierda)."
                             )
                         else:
-                            margen_pct = (precio_ref_catalogo["precio_buybox"] - costo_flexxus) / costo_flexxus * 100
-                            st.caption(f"Margen bruto frente al precio de referencia: ~{margen_pct:,.0f}%")
+                            st.caption("ℹ️ Flexxus no trae Margen 5 (MARGEN5) para este SKU.")
                 else:
                     st.caption(
                         "ℹ️ No se encontraron publicaciones activas para este producto de catálogo "
