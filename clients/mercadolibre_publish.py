@@ -551,27 +551,66 @@ def get_popular_categories_with_correct_ids(publisher) -> dict:
     return resultado
 
 
-# Raíces de categoría ajenas al rubro de esta tienda (electrónica/redes) que ML
-# igual sugiere por coincidencia de palabra (ej. "pigtail" también es un término
-# de electricidad automotriz). Se descartan aunque sean el resultado más popular.
-RAICES_EXCLUIDAS = {"MLA5725"}  # Accesorios para Vehículos
+# ──────────────────────────────────────────────────────────────────────────────
+# Rubros válidos de esta tienda — whitelist de categorías raíz de Mercado Libre
+# ──────────────────────────────────────────────────────────────────────────────
+# Esta tienda (Club Digital) solo vende electrónica/tecnología: redes, cómputo,
+# celulares, audio/video. Nunca repuestos de auto, indumentaria, hogar, etc.
+#
+# Antes se mantenía una lista NEGRA de categorías "falsas" descubiertas caso a
+# caso (ej. la categoría de electricidad automotriz "Pigtails" para el término
+# de búsqueda "pigtail", que en fibra óptica es un producto de redes). Ese
+# enfoque es reactivo: cada palabra ambigua nueva requiere un nuevo parche.
+#
+# En cambio, esta lista BLANCA fija de una vez las 3 raíces reales del rubro.
+# Cualquier categoría que ML sugiera fuera de estas 3 se descarta directamente,
+# sin importar qué tan bien haya matcheado el término de búsqueda ni si es el
+# resultado más popular.
+#
+# IDs verificados contra la API real (GET /categories/{id} -> path_from_root[0])
+# en el sitio MLA (Mercado Libre Argentina). Si el negocio cambia de sitio
+# (MLB, MLM, etc.) o suma rubros, esta lista es lo único que hay que tocar.
+#
+# NOTA — portabilidad: esta constante y la función de abajo no dependen de
+# Streamlit ni de session_state, solo de un cliente HTTP con un método
+# `_get(path)` que devuelva JSON. Pensado para portar tal cual a un cliente
+# JS/TS (fetch + misma forma de objeto) sin reescribir la lógica.
+RAICES_PERMITIDAS = {
+    "MLA1648",  # Computación
+    "MLA1000",  # Electrónica, Audio y Video
+    "MLA1051",  # Celulares y Teléfonos
+}
 
 
-def _raiz_excluida(publisher, category_id: str, cache: dict) -> bool:
-    if category_id not in cache:
-        try:
-            path = publisher._get(f"/categories/{category_id}").get("path_from_root", [])
-            cache[category_id] = path[0]["id"] if path else None
-        except Exception:
-            cache[category_id] = None
-    return cache[category_id] in RAICES_EXCLUIDAS
+def _raiz_permitida(publisher, category_id: str, cache: dict) -> bool:
+    """
+    True si `category_id` pertenece a una de las raíces de RAICES_PERMITIDAS.
+
+    `cache` es un dict que vive durante una sola llamada a auto_match_categoria()
+    — evita repetir la consulta /categories/{id} para la misma categoría cuando
+    aparece en los resultados de más de un término de búsqueda.
+    """
+    if category_id in cache:
+        return cache[category_id]
+    try:
+        path = publisher._get(f"/categories/{category_id}").get("path_from_root", [])
+        root_id = path[0]["id"] if path else None
+        permitida = root_id in RAICES_PERMITIDAS
+    except Exception:
+        # Si falla la verificación en sí (no la categoría), no bloqueamos —
+        # mejor un posible falso positivo ocasional que descartar de más por
+        # un error de red transitorio.
+        permitida = True
+    cache[category_id] = permitida
+    return permitida
 
 
 def auto_match_categoria(nombre_producto: str, publisher) -> dict | None:
     """
     Intenta hacer match automático de categoría buscando términos clave.
 
-    Retorna la categoría encontrada o None si no hay coincidencia clara.
+    Retorna la categoría encontrada o None si no hay coincidencia clara
+    dentro de los rubros de RAICES_PERMITIDAS.
     """
     sugerencias = sugerir_terminos_busqueda(nombre_producto)
 
@@ -588,7 +627,7 @@ def auto_match_categoria(nombre_producto: str, publisher) -> dict | None:
     for termino in compuestos + sugerencias:
         resultados = publisher.buscar_categorias(termino, limit=5)
         for r in resultados:
-            if not _raiz_excluida(publisher, r["category_id"], raices_cache):
+            if _raiz_permitida(publisher, r["category_id"], raices_cache):
                 return r
 
     return None
