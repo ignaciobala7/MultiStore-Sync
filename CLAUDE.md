@@ -309,6 +309,20 @@ inventar sin romper reglas de negocio, así que se traduce el error 400 en
 el catálogo de ML (trae su propio GTIN) o conseguir el EAN real. Archivo:
 `tabs/ps_ml.py`. Commit: f43848d.
 
+**Aviso de GTIN obligatorio en Paso 3 (no recién en Paso 6)**
+Lista chica `DOMINIOS_GTIN_ESTRICTO` (arranca con `MLA-NETWORK_CABLES`, confirmado
+por una falla real) — se muestra aviso en Paso 3 si la categoría está en esa lista,
+no hay `catalog_product_id` seleccionado y no hay EAN válido de Flexxus. Se agranda
+a medida que aparezcan casos nuevos en Paso 6. Función pura `requiere_gtin_real()`
+en `clients/mercadolibre_publish.py`, sin dependencia de Streamlit — pensada para
+portar a JS. Commit: eb03bd3
+
+**Paralelización de las 3 llamadas de Paso 3**
+`obtener_categoria_de_catalogo`, `get_catalog_product` y
+`obtener_precio_referencia_catalogo` corren en paralelo con `ThreadPoolExecutor`
+en vez de secuencial — mismo patrón que la subida de imágenes. ~1.22s vs 2.27s
+secuencial, mismos resultados. Commit: 95198f3
+
 ## Branches
 
 - `main` — stable/production
