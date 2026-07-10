@@ -323,6 +323,31 @@ portar a JS. Commit: eb03bd3
 en vez de secuencial — mismo patrón que la subida de imágenes. ~1.22s vs 2.27s
 secuencial, mismos resultados. Commit: 95198f3
 
+**Comparación de márgenes en Paso 3 usaba precio de venta, no costo real**
+El bloque de precio de referencia del catálogo comparaba
+`flexxus_price["pesos"]` (precio de venta Lista 5, **ya incluye margen** —
+verificado un caso real con ~109% de margen) contra el precio de referencia
+de ML, como si ese fuera el costo. Esto subestimaba muchísimo el margen real
+disponible. `FlexxusClient.get_precio()` ahora también lee `PRECIOCOMPRA`
+(costo real de reposición, sin margen) y devuelve `costo_usd`/`costo_pesos`
+— usar estos, no `usd`/`pesos`, para cualquier cálculo de margen real.
+
+Se agregó además un umbral de negocio: `MARGEN_MINIMO_PCT = 34` (mínimo
+aceptable, calculado sobre el costo real con IVA incluido, no sobre el
+precio de venta). El helper puro `_margen_pct(costo_real, precio_venta)` en
+`tabs/ps_ml.py` hace el cálculo; si el margen frente al precio de referencia
+del catálogo cae por debajo del 34%, se marca error en vez de solo mostrar
+el número.
+
+Por separado, se muestra también el margen que Flexxus ya tiene configurado
+para la Lista 5 (`MARGEN5` del Excel → `margen5_pct` en `get_precio()`), lado
+a lado con el margen real calculado, como dato de referencia adicional — no
+reemplaza el cálculo contra el catálogo, solo lo complementa.
+**Nota de portabilidad:** `margen5_pct` viene de un Excel exportado a mano
+(puede estar desactualizado); en el dashboard JS conviene traerlo en vivo
+desde la API de Flexxus V5 en vez de replicar esta lectura de planilla.
+Archivos: `clients/flexxus.py`, `tabs/ps_ml.py`. Commit: 34b81d3
+
 ## Branches
 
 - `main` — stable/production
