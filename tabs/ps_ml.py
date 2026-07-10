@@ -455,11 +455,21 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                 last_cpid = st.session_state.get("ps_ml_last_catalog_product_id", "")
                 if catalog_product_id != last_cpid:
                     with st.spinner("Verificando categoría y atributos del producto en catálogo..."):
-                        cat_from_catalog = publisher.obtener_categoria_de_catalogo(
-                            catalog_product_id, product_name=catalog_family_name
-                        )
-                        catalog_product_data = publisher.get_catalog_product(catalog_product_id)
-                        precio_ref_catalogo = publisher.obtener_precio_referencia_catalogo(catalog_product_id)
+                        # Las 3 llamadas son independientes entre sí (mismo catalog_product_id,
+                        # sin dependencias de datos entre una y otra) — se corren en paralelo
+                        # en vez de en secuencia, mismo patrón que la subida de imágenes.
+                        with ThreadPoolExecutor(max_workers=3) as pool:
+                            fut_cat = pool.submit(
+                                publisher.obtener_categoria_de_catalogo,
+                                catalog_product_id, product_name=catalog_family_name,
+                            )
+                            fut_prod = pool.submit(publisher.get_catalog_product, catalog_product_id)
+                            fut_precio = pool.submit(
+                                publisher.obtener_precio_referencia_catalogo, catalog_product_id
+                            )
+                            cat_from_catalog = fut_cat.result()
+                            catalog_product_data = fut_prod.result()
+                            precio_ref_catalogo = fut_precio.result()
                     st.session_state["ps_ml_last_catalog_product_id"] = catalog_product_id
                     st.session_state["ps_ml_catalog_category_id"] = cat_from_catalog
                     st.session_state["ps_ml_catalog_precio_ref"] = precio_ref_catalogo
