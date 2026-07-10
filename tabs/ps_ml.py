@@ -545,6 +545,29 @@ def _render_pasos_2_a_5(p, imgs, publisher, flexxus_price=None, tracker=None):
                     st.session_state.pop("ps_ml_gemini_attrs", None)
                     st.session_state.pop("ps_ml_attrs_confirmed", None)
 
+            # ── Aviso: categoría puede exigir GTIN real ────────────────────────
+            # Se chequea acá (Paso 3), no recién al publicar en Paso 6, para no
+            # hacer subir imágenes y crear el ítem en ML solo para enterarse del
+            # rechazo. Ver requiere_gtin_real() en mercadolibre_publish.py.
+            last_cat_gtin_check = st.session_state.get("ps_ml_last_cat_gtin_check", "")
+            if cat_id != last_cat_gtin_check:
+                st.session_state["ps_ml_cat_requiere_gtin"] = publisher.requiere_gtin_real(cat_id)
+                st.session_state["ps_ml_last_cat_gtin_check"] = cat_id
+
+            if (
+                st.session_state.get("ps_ml_cat_requiere_gtin")
+                and not catalog_product_id
+                and not _es_gtin_valido(ean)
+            ):
+                st.warning(
+                    "⚠️ Esta categoría suele exigir un GTIN/EAN real para publicar, aunque su "
+                    "metadata declare aceptar \"sin código\" como alternativa. Sin EAN de Flexxus "
+                    "ni un producto de catálogo seleccionado arriba, ML puede rechazar la "
+                    "publicación recién en el Paso 6 (después de subir imágenes y crear el ítem). "
+                    "Buscá el producto en el catálogo de ML (Paso 3) o conseguí el código de "
+                    "barras real antes de continuar."
+                )
+
             # ── Paso 4: Atributos de la categoría ────────────────────────────────
             st.divider()
             st.subheader("Paso 4: Completa los atributos requeridos")

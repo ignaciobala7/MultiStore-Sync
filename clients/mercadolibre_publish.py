@@ -21,6 +21,14 @@ SITE_ID = "MLA"  # Argentina
 # Archivo donde se guardan los tokens OAuth de ML (compartido con el cliente principal)
 TOKEN_FILE = Path("ml_tokens.json")
 
+# Domains de catálogo de ML confirmados por fallas reales en producción como
+# "GTIN estricto": rechazan EMPTY_GTIN_REASON aunque su metadata de atributos
+# lo acepte. NO es una lista exhaustiva ni predictiva — se suma un domain acá
+# recién cuando aparece un caso real (ver requiere_gtin_real() más abajo).
+DOMINIOS_GTIN_ESTRICTO = {
+    "MLA-NETWORK_CABLES",  # confirmado: MLA4293 "Cables de Red" rechaza EMPTY_GTIN_REASON
+}
+
 
 class MercadoLibrePublisher:
     def __init__(self):
@@ -204,6 +212,34 @@ class MercadoLibrePublisher:
                 return cats[0].get("category_id")
 
         return None
+
+    def requiere_gtin_real(self, category_id: str) -> bool:
+        """
+        True si la categoría pertenece a un domain de ML de los que, en la
+        práctica, rechazan la publicación exigiendo un GTIN real aunque su
+        metadata de atributos muestre GTIN como `conditional_required` y
+        EMPTY_GTIN_REASON como alternativa válida (ver CLAUDE.md, fixes sesión
+        2026-07-10 — falla confirmada con MLA4293 "Cables de Red").
+
+        No usar la sola presencia de `catalog_domain` en settings como señal:
+        casi toda categoría de este rubro (Computación, Electrónica, Celulares)
+        tiene alguno — hasta las raíces — así que ese chequeo dispara en casi
+        cualquier publicación y el aviso deja de ser útil. En cambio, se
+        compara contra DOMINIOS_GTIN_ESTRICTO, una lista chica de domains
+        confirmados por fallas reales — se suma un domain nuevo recién cuando
+        aparece un caso real en Paso 6, mismo criterio que RAICES_PERMITIDAS
+        pero para domains en lugar de categorías raíz.
+
+        Esta función solo responde "¿esta categoría es de las que aprietan con
+        el GTIN?" — no decide si hay que avisar o no; eso depende también de si
+        el producto puntual tiene EAN o está matcheado a un catálogo, algo que
+        no le compete a esta función (queda del lado de quien la llama).
+        """
+        try:
+            settings = self._get(f"/categories/{category_id}").get("settings", {})
+            return settings.get("catalog_domain") in DOMINIOS_GTIN_ESTRICTO
+        except Exception:
+            return False
 
     # ──────────────────────────────────────────────────────────────────────────
     # Creación de publicaciones
