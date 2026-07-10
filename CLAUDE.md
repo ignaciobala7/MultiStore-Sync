@@ -265,6 +265,50 @@ nada) y se agregó `agregar_descripcion(item_id, plain_text)` en
 junto al patch de garantía/envío, con warning visible si falla (no bloquea
 la publicación ya creada).
 
+### Fixes sesión 2026-07-10
+
+**Descripción no se carga en modo catálogo**
+ML rechaza la descripción manual con 400 cuando hay `catalog_product_id` (la
+descripción la controla la ficha de catálogo). Se saltea el POST de descripción
+en ese caso y se muestra un aviso informativo. Commit: 82f6e4e
+
+**Precio de referencia del catálogo antes de confirmar (Paso 3)**
+Al elegir un `catalog_product_id`, se muestra precio buy box, rango min/max de
+precios activos y cantidad de publicaciones competidoras, comparado contra el
+costo Flexxus — evita elegir un catálogo sin margen.
+Nota: `/sites/MLA/search?catalog_product_id=` devuelve 403 con el scope de esta
+app; se usa `GET /products/{id}/items` en su lugar (sí funciona).
+Archivos: `clients/mercadolibre_publish.py` (`obtener_precio_referencia_catalogo`),
+`tabs/ps_ml.py`. Commits: 5d73814, 2b3298c
+
+**Validación de atributos obligatorios antes de confirmar (Paso 4)**
+El botón "Confirmar atributos" marcaba `ps_ml_attrs_confirmed = True` sin
+chequear que los campos `required` tuvieran valor — el 400 de ML recién
+aparecía en Paso 6, después de subir imágenes y crear el ítem. Ahora, si algún
+atributo con `tags.required` está vacío, se lista en un error y no se deja
+avanzar. Archivo: `tabs/ps_ml.py`.
+
+**Auto-match de categoría evita falsos positivos de vehículos**
+`auto_match_categoria()` tomaba ciegamente el primer resultado de ML por
+término de búsqueda. Para "pigtail" (fibra óptica) ML devolvía la categoría de
+electricidad automotriz "Pigtails" (`MLA458228`, bajo Accesorios para
+Vehículos — raíz `MLA5725`), pidiendo `VEHICLE_TYPE`/`PART_NUMBER` de
+autopartes. Ahora se descartan resultados cuya categoría raíz sea
+`MLA5725` (esta tienda no vende repuestos de auto) y se prueban hasta 5
+candidatos por término antes de pasar al siguiente. Archivo:
+`clients/mercadolibre_publish.py` (`RAICES_EXCLUIDAS`, `_raiz_excluida`).
+Commit: 1ce36ab (ambos fixes).
+
+**Mensaje accionable cuando ML exige GTIN real pese a EMPTY_GTIN_REASON**
+Categorías con `catalog_domain` asociado (ej. `MLA4293` "Cables de Red")
+rechazan la publicación pidiendo GTIN real aunque su metadata marque GTIN
+como `conditional_required` y la app ya mande `EMPTY_GTIN_REASON`
+correctamente (value_id verificado contra la API). No hay GTIN falso que
+inventar sin romper reglas de negocio, así que se traduce el error 400 en
+`_mensaje_error_publicacion()` a un mensaje accionable: buscar el producto en
+el catálogo de ML (trae su propio GTIN) o conseguir el EAN real. Archivo:
+`tabs/ps_ml.py`. Commit: f43848d.
+
 ## Branches
 
 - `main` — stable/production
